@@ -3,70 +3,508 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="SUB-4"/>
+<meta name="theme-color" content="#0a0a0a"/>
+<link rel="shortcut icon" href="icon.png" type="image/x-icon">
 <title>SUB-4 LOGBOOK</title>
 <style>
 :root{--r:#e74c3c;--rd:#c0392b;--rdim:rgba(231,76,60,0.13);--bg:#0a0a0a;--bg2:#111;--bg3:#1a1a1a;--bg4:#222;--b:#2a2a2a;--t:#f0f0f0;--m:#777}
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--t);font-family:sans-serif}
-.hdr{padding:20px;background:var(--bg2);border-bottom:1px solid var(--b)}
-.hdr-title{font-size:18px;font-weight:700;color:var(--r);letter-spacing:2px}
-.main{padding:20px}
-.card{background:var(--bg2);border:1px solid var(--b);border-radius:10px;padding:15px;margin-bottom:15px}
-.exname{font-weight:600;display:block}
-.exsug{font-size:12px;color:var(--r);font-weight:700}
-.sinprow{display:flex;gap:5px;margin-top:5px}
-.sinp{background:var(--bg3);border:1px solid var(--b);color:var(--t);padding:8px;width:60px;border-radius:4px}
-.savebtn{width:100%;background:var(--r);color:#fff;border:none;padding:12px;border-radius:6px;margin-top:10px;cursor:pointer}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{min-height:100%;background:var(--bg);color:var(--t);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+input,textarea{font-family:inherit}
+
+.hdr{position:sticky;top:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--b);padding:12px 16px}
+.hdr-row{display:flex;align-items:center;justify-content:space-between}
+.hdr-title{font-size:11px;font-weight:700;letter-spacing:3px;color:var(--r);text-transform:uppercase}
+.hdr-sub{font-size:9px;color:var(--m);letter-spacing:1px;margin-top:2px}
+.exp-btn{background:var(--r);color:#fff;border:none;font-size:10px;font-weight:700;letter-spacing:1.5px;padding:7px 14px;border-radius:4px;cursor:pointer;text-transform:uppercase}
+
+.wnav{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--bg2);border-bottom:1px solid var(--b)}
+.nbtn{background:var(--bg3);border:1px solid var(--b);color:var(--t);width:40px;height:40px;border-radius:8px;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.wlbl{font-size:14px;font-weight:700;letter-spacing:1px;text-align:center}
+.wdts{font-size:10px;color:var(--m);margin-top:2px;text-align:center}
+
+.prow{display:flex;align-items:center;gap:10px;padding:8px 16px 10px;background:var(--bg2);border-bottom:1px solid var(--b)}
+.tbtn{background:var(--rdim);border:1px solid var(--r);color:var(--r);font-size:9px;font-weight:700;letter-spacing:1px;padding:6px 12px;border-radius:4px;cursor:pointer;text-transform:uppercase;white-space:nowrap}
+.ptrack{flex:1;height:3px;background:var(--b);border-radius:2px}
+.pfill{height:100%;background:var(--r);border-radius:2px;transition:width .3s}
+.plbl{font-size:9px;color:var(--m);letter-spacing:.5px;margin-top:3px}
+
+.main{padding:12px 14px;padding-bottom:80px}
+
+.cd{background:linear-gradient(135deg,#1a0505,#0f0000);border:1px solid var(--rd);border-radius:10px;padding:14px;margin-bottom:12px;text-align:center}
+.cd-num{font-size:42px;font-weight:700;color:var(--r);letter-spacing:-2px;line-height:1}
+.cd-lbl{font-size:9px;letter-spacing:3px;color:var(--m);text-transform:uppercase;margin-top:4px}
+
+.card{background:var(--bg2);border:1px solid var(--b);border-radius:10px;margin-bottom:12px;overflow:hidden}
+.card.today{border-color:var(--r)}
+.chdr{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--b)}
+.card.today .chdr{background:var(--rdim)}
+.chdr-l{display:flex;align-items:center;gap:10px}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dname{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
+.ddate{font-size:10px;color:var(--m);margin-top:1px}
+.dtag{font-size:9px;font-weight:700;letter-spacing:1px;padding:3px 8px;border-radius:3px;text-transform:uppercase}
+.chev{color:var(--m);font-size:12px;transition:transform .2s;flex-shrink:0}
+.chev.open{transform:rotate(180deg)}
+.tbody{padding:14px;display:none}
+.tbody.open{display:block}
+
+.tbadge{font-size:8px;font-weight:700;letter-spacing:1px;background:var(--r);color:#fff;padding:2px 6px;border-radius:3px;text-transform:uppercase;margin-left:6px;vertical-align:middle}
+.okbadge{font-size:11px;color:#4caf50;margin-left:6px;vertical-align:middle}
+
+.runtgt{display:flex;align-items:center;gap:10px;background:var(--rdim);border:1px solid var(--rd);border-radius:7px;padding:10px 12px;margin-bottom:12px}
+.runtgt-dist{font-size:28px;font-weight:700;color:var(--r)}
+.runtgt-r{flex:1;padding-left:10px;border-left:1px solid var(--rd)}
+.runtgt-type{font-size:11px;font-weight:600}
+.runtgt-sub{font-size:10px;color:var(--m);margin-top:2px}
+
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.fgrp{display:flex;flex-direction:column;gap:4px}
+.flbl{font-size:9px;letter-spacing:1.5px;color:var(--m);text-transform:uppercase}
+.finp{background:var(--bg3);border:1px solid var(--b);color:var(--t);font-size:15px;font-weight:600;padding:9px 10px;border-radius:6px;width:100%;outline:none;transition:border-color .15s}
+.finp:focus{border-color:var(--r)}
+.finp::placeholder{color:#444;font-size:12px;font-weight:400}
+.fta{background:var(--bg3);border:1px solid var(--b);color:var(--t);font-size:13px;padding:9px 10px;border-radius:6px;width:100%;outline:none;resize:none;min-height:68px;transition:border-color .15s;font-family:inherit}
+.fta:focus{border-color:var(--r)}
+.fta::placeholder{color:#444}
+
+.gsec{font-size:10px;font-weight:700;letter-spacing:2px;color:var(--r);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--rd)}
+.exblk{margin-bottom:14px}
+.exhdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.exname{font-size:13px;font-weight:600}
+.extgt{font-size:9px;color:var(--m);letter-spacing:.5px;text-align:right}
+.exsug{font-size:12px;font-weight:700;color:var(--r);text-align:right;margin-top:1px}
+.srow{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.sgrp{display:flex;flex-direction:column;gap:3px}
+.slbl{font-size:8px;letter-spacing:1px;color:var(--m);text-transform:uppercase;text-align:center}
+.sinprow{display:grid;grid-template-columns:1fr 1fr;gap:3px}
+.sinp{background:var(--bg3);border:1px solid var(--b);color:var(--t);font-size:14px;font-weight:600;padding:8px 4px;border-radius:5px;width:100%;outline:none;text-align:center;transition:border-color .15s}
+.sinp:focus{border-color:var(--r)}
+.sinp::placeholder{color:#333;font-size:10px;font-weight:400}
+.ssub{font-size:7px;color:#555;text-align:center;letter-spacing:.5px}
+
+.bwrow{display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--b);border-radius:7px;padding:10px 12px;margin-bottom:10px}
+.bwinp{background:var(--bg4);border:1px solid var(--b);color:var(--t);font-size:17px;font-weight:700;padding:6px 10px;border-radius:5px;width:72px;outline:none;text-align:center}
+.bwinp:focus{border-color:var(--r)}
+
+.div{height:1px;background:var(--b);margin:12px 0}
+.savebtn{width:100%;background:var(--r);color:#fff;border:none;font-size:11px;font-weight:700;letter-spacing:2px;padding:13px;border-radius:7px;cursor:pointer;text-transform:uppercase;margin-top:14px}
+.savebtn:active{background:var(--rd)}
+.savedmsg{text-align:center;font-size:10px;color:#4caf50;letter-spacing:1px;margin-top:6px;display:none}
+.upbadge{font-size:8px;background:#1a3a1a;color:#4caf50;border:1px solid #2d5a2d;padding:2px 6px;border-radius:3px;letter-spacing:.5px;margin-left:6px}
+
+.rest-box{text-align:center;padding:20px 0}
+.rest-emoji{font-size:30px}
+.rest-lbl{font-size:9px;letter-spacing:3px;color:var(--m);text-transform:uppercase;margin-top:6px}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--bg3);border:1px solid var(--r);color:var(--t);font-size:11px;font-weight:600;letter-spacing:1px;padding:10px 22px;border-radius:20px;transition:transform .3s;z-index:999;white-space:nowrap;pointer-events:none}
+.toast.show{transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
 
-<div class="hdr"><div class="hdr-title">⚡ SUB-4 LOGBOOK</div></div>
+<div class="hdr">
+  <div class="hdr-row">
+    <div>
+      <div class="hdr-title">⚡ SUB-4 LOGBOOK</div>
+      <div class="hdr-sub">HYBRID ATHLETE · TATA MUMBAI JAN 17 2027</div>
+    </div>
+    <button class="exp-btn" onclick="exportCSV()">⬇ EXPORT</button>
+  </div>
+</div>
+
+<div class="wnav">
+  <button class="nbtn" onclick="changeWeek(-1)">‹</button>
+  <div>
+    <div class="wlbl" id="wlbl">WEEK 1</div>
+    <div class="wdts" id="wdts"></div>
+  </div>
+  <button class="nbtn" onclick="changeWeek(1)">›</button>
+</div>
+
+<div class="prow">
+  <button class="tbtn" onclick="jumpToday()">◎ TODAY</button>
+  <div style="flex:1">
+    <div class="ptrack"><div class="pfill" id="pfill" style="width:0%"></div></div>
+    <div class="plbl" id="plbl">Week 1 of 30</div>
+  </div>
+</div>
 
 <div class="main" id="main"></div>
+<div class="toast" id="toast"></div>
 
 <script>
+// ── DATA ──────────────────────────────────────────────────────────────────
 const START = new Date('2026-06-22T00:00:00');
-const PULL = [
-  {id:'lat_pull', name:'Lat Pulldown', tgt:'3×8-12', base:15, max:12, bw:false},
-  {id:'seat_row', name:'Seated Row',   tgt:'3×8-10', base:15, max:10, bw:false}
+const RACE  = new Date('2027-01-17T00:00:00');
+
+const WPLAN = [
+  {tue:'4km Easy Base',          fri:'4km Zone 2 Easy',  sun:'6km'},
+  {tue:'4km Easy Base',          fri:'4km Zone 2 Easy',  sun:'8km'},
+  {tue:'4km Easy Base',          fri:'4km Zone 2 Easy',  sun:'10km'},
+  {tue:'4km Easy Base',          fri:'4km Zone 2 Easy',  sun:'12km'},
+  {tue:'6km · 6×400m Intervals', fri:'5km Zone 2 Easy',  sun:'10km'},
+  {tue:'6km · 6×400m Intervals', fri:'5km Zone 2 Easy',  sun:'14km'},
+  {tue:'6km · 6×400m Intervals', fri:'5km Zone 2 Easy',  sun:'16km'},
+  {tue:'6km · 6×400m Intervals', fri:'5km Zone 2 Easy',  sun:'18km'},
+  {tue:'6km · 6×400m Intervals', fri:'6km Zone 2 Easy',  sun:'14km — DELOAD'},
+  {tue:'6km · 6×400m Intervals', fri:'6km Zone 2 Easy',  sun:'20km'},
+  {tue:'8km · 4km Tempo',        fri:'6km Zone 2 Easy',  sun:'22km'},
+  {tue:'8km · 4km Tempo',        fri:'6km Zone 2 Easy',  sun:'16km — DELOAD'},
+  {tue:'8km · 4km Tempo',        fri:'7km Zone 2 Easy',  sun:'24km'},
+  {tue:'8km · 4km Tempo',        fri:'7km Zone 2 Easy',  sun:'20km'},
+  {tue:'8km · 4km Tempo',        fri:'7km Zone 2 Easy',  sun:'26km'},
+  {tue:'8km · 4km Tempo',        fri:'7km Zone 2 Easy',  sun:'16km — DELOAD'},
+  {tue:'10km · 5×1km Repeats',   fri:'8km Zone 2 Easy',  sun:'21.1km 🏅 HALF MARATHON RACE'},
+  {tue:'10km · 5×1km Repeats',   fri:'8km Zone 2 Easy',  sun:'18km'},
+  {tue:'10km · 5×1km Repeats',   fri:'8km Zone 2 Easy',  sun:'28km'},
+  {tue:'10km · 5×1km Repeats',   fri:'8km Zone 2 Easy',  sun:'22km'},
+  {tue:'10km · 5×1km Repeats',   fri:'9km Zone 2 Easy',  sun:'30km — PEAK'},
+  {tue:'10km · 5×1km Repeats',   fri:'9km Zone 2 Easy',  sun:'24km'},
+  {tue:'10km · 5×1km Repeats',   fri:'9km Zone 2 Easy',  sun:'32km — PEAK'},
+  {tue:'10km · 5×1km Repeats',   fri:'9km Zone 2 Easy',  sun:'22km'},
+  {tue:'12km · 6km @ Goal Pace', fri:'5km Zone 2 Easy',  sun:'34km — FINAL PEAK'},
+  {tue:'12km · 6km @ Goal Pace', fri:'5km Zone 2 Easy',  sun:'24km'},
+  {tue:'12km · 6km @ Goal Pace', fri:'5km Zone 2 Easy',  sun:'32km'},
+  {tue:'5km Taper Easy',         fri:'5km Zone 2 Easy',  sun:'20km'},
+  {tue:'5km Taper Easy',         fri:'5km Zone 2 Easy',  sun:'12km'},
+  {tue:'5km Taper Easy',         fri:'5km Zone 2 Easy',  sun:'42.2km 🏆 TATA MUMBAI MARATHON'},
 ];
 
-function load(w){ try{return JSON.parse(localStorage.getItem('sub4_w'+w)||'{}')}catch{return {}} }
-function save(w,d){ localStorage.setItem('sub4_w'+w,JSON.stringify(d)); }
+const PULL = [
+  {id:'lat_pull',  name:'Lat Pulldown',        tgt:'3×8-12',  base:15,  max:12, bw:false},
+  {id:'seat_row',  name:'Seated Row',           tgt:'3×8-10',  base:15,  max:10, bw:false},
+  {id:'rear_delt', name:'Rear Delt Fly',        tgt:'3×12-15', base:5,   max:15, bw:false},
+  {id:'bic_curl',  name:'Machine Bicep Curl',   tgt:'3×8-12',  base:5,   max:12, bw:false},
+  {id:'ham_curl',  name:'DB Hammer Curl',       tgt:'3×10-12', base:5,   max:12, bw:false},
+  {id:'ghd_ext',   name:'GHD Back Extension',   tgt:'3×10-15', base:0,   max:15, bw:true},
+];
+const LEGS = [
+  {id:'sl_press',  name:'Single-Leg Press',     tgt:'3×8-10',  base:10,  max:10, bw:false},
+  {id:'leg_ext',   name:'Leg Extensions',       tgt:'3×12-15', base:10,  max:15, bw:false},
+  {id:'leg_curl',  name:'Lying Leg Curls',      tgt:'3×10-12', base:10,  max:12, bw:false},
+  {id:'calf_r',    name:'Seated Calf Raises',   tgt:'4×12-15', base:15,  max:15, bw:false},
+  {id:'tib_r',     name:'Tibialis Raises',      tgt:'3×15-20', base:0,   max:20, bw:true},
+  {id:'cap_chair', name:"Captain's Chair",      tgt:'3×Fail',  base:0,   max:99, bw:true},
+];
+const PUSH = [
+  {id:'bench',     name:'Barbell Bench Press',  tgt:'3×6-8',   base:20,  max:8,  bw:false},
+  {id:'db_press',  name:'Seated DB Press',      tgt:'3×8-10',  base:5,   max:10, bw:false},
+  {id:'chest_fly', name:'Machine Chest Flye',   tgt:'3×12-15', base:15,  max:15, bw:false},
+  {id:'lat_raise', name:'Cable Lateral Raises', tgt:'3×12-15', base:2.5, max:15, bw:false},
+  {id:'tri_push',  name:'Tricep Pushdowns',     tgt:'3×10-12', base:10,  max:12, bw:false},
+];
 
+// ── STORAGE ───────────────────────────────────────────────────────────────
+function lkey(w){ return 'sub4_w'+w; }
+function load(w){ try{return JSON.parse(localStorage.getItem(lkey(w))||'{}')}catch{return {}} }
+function save(w,d){ localStorage.setItem(lkey(w),JSON.stringify(d)); }
+
+// ── PROGRESSIVE OVERLOAD ──────────────────────────────────────────────────
+// Reads ALL previous weeks from localStorage, adds 2.5kg per week where all 3 sets hit max reps
 function suggested(ex, weekNum){
   if(ex.bw) return 'BW';
-  let successCount = 0;
+  let kg = ex.base;
   for(let w=1; w<weekNum; w++){
     const d = load(w);
     const r1 = parseInt(d[ex.id+'_s1r']||'0');
     const r2 = parseInt(d[ex.id+'_s2r']||'0');
     const r3 = parseInt(d[ex.id+'_s3r']||'0');
-    if(r1>=ex.max && r2>=ex.max && r3>=ex.max) successCount++;
+    if(r1>=ex.max && r2>=ex.max && r3>=ex.max) kg+=2.5;
   }
-  return (ex.base + (successCount * 2.5)) + 'kg';
+  return kg+'kg';
 }
 
+// ── DATE HELPERS ──────────────────────────────────────────────────────────
+function weekStart(w){
+  const d=new Date(START); d.setDate(d.getDate()+(w-1)*7); return d;
+}
+function fmtDate(d){
+  return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+}
+function weekDates(w){
+  const s=weekStart(w), e=new Date(s); e.setDate(e.getDate()+6);
+  return fmtDate(s)+' – '+fmtDate(e)+', '+e.getFullYear();
+}
+function currentWeek(){
+  const t=new Date(); t.setHours(0,0,0,0);
+  const diff=Math.floor((t-START)/(7*86400000));
+  return Math.max(1,Math.min(30,diff+1));
+}
+function daysLeft(){
+  const t=new Date(); t.setHours(0,0,0,0);
+  return Math.max(0,Math.ceil((RACE-t)/86400000));
+}
+function isToday(dayIdx, w){
+  const d=new Date(weekStart(w)); d.setDate(d.getDate()+dayIdx); d.setHours(0,0,0,0);
+  const t=new Date(); t.setHours(0,0,0,0);
+  return d.getTime()===t.getTime();
+}
+function dayDate(idx,w){
+  const d=new Date(weekStart(w)); d.setDate(d.getDate()+idx); return fmtDate(d);
+}
+
+// ── STATE ─────────────────────────────────────────────────────────────────
+let CW = currentWeek();
+
+// ── RENDER ────────────────────────────────────────────────────────────────
 function render(){
-  const w = 1; // Example for Week 1
-  const data = load(w);
-  let html = '<h3>Week 1 Gym</h3>';
-  PULL.forEach(ex => {
-    html += `<div class="card">
-      <span class="exname">${ex.name}</span>
-      <span class="exsug">Suggested: ${suggested(ex, w)}</span>
-      <div class="sinprow">
-        <input class="sinp" type="number" placeholder="kg" id="${ex.id}_s1w" value="${data[ex.id+'_s1w']||''}" oninput="as('${ex.id}_s1w',this.value,${w})">
-        <input class="sinp" type="number" placeholder="reps" id="${ex.id}_s1r" value="${data[ex.id+'_s1r']||''}" oninput="as('${ex.id}_s1r',this.value,${w})">
+  const w=CW, plan=WPLAN[w-1], data=load(w);
+  document.getElementById('wlbl').textContent='WEEK '+w;
+  document.getElementById('wdts').textContent=weekDates(w);
+  const pct=Math.round(((w-1)/30)*100);
+  document.getElementById('pfill').style.width=pct+'%';
+  document.getElementById('plbl').textContent='Week '+w+' of 30 · '+pct+'% complete';
+
+  const DNAMES=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  let html='';
+
+  // Countdown
+  html+=`<div class="cd"><div class="cd-num">${daysLeft()}</div><div class="cd-lbl">days to race day · Jan 17, 2027</div></div>`;
+
+  for(let i=0;i<7;i++){
+    const tod=isToday(i,w), dd=dayDate(i,w);
+    const todayClass=tod?' today':'';
+    const todayBadge=tod?'<span class="tbadge">TODAY</span>':'';
+
+    if(i===0){ // Monday Rest
+      html+=`<div class="card${todayClass}">
+        <div class="chdr" onclick="tog('d${i}')">
+          <div class="chdr-l"><div class="dot" style="background:#444"></div>
+            <div><div class="dname">Monday ${todayBadge}</div><div class="ddate">${dd}</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="dtag" style="background:#1a1a1a;color:#555">REST</span>
+            <span class="chev" id="chev_d${i}">▾</span>
+          </div>
+        </div>
+        <div class="tbody" id="body_d${i}">
+          <div class="bwrow">
+            <div style="flex:1;font-size:10px;letter-spacing:1.5px;color:var(--m);text-transform:uppercase">Bodyweight</div>
+            <input class="bwinp" type="number" step="0.1" placeholder="57.0" id="bw_${w}"
+              value="${data.bw||''}" oninput="as('bw',this.value,${w})"/>
+            <div style="font-size:11px;color:var(--m)">kg</div>
+          </div>
+          <div class="rest-box"><div class="rest-emoji">🌙</div><div class="rest-lbl">Eat Well · Sleep Deep · Recover</div></div>
+          <div class="div"></div>
+          <div class="flbl" style="margin-bottom:4px">Weekly Check-in (Sleep · Soreness · Nutrition)</div>
+          <textarea class="fta" placeholder="Sleep quality, soreness, energy, nutrition compliance..."
+            id="wn_${w}" oninput="as('week_notes',this.value,${w})">${data.week_notes||''}</textarea>
+          <button class="savebtn" onclick="sv(${w},'rest')">SAVE NOTES</button>
+          <div class="savedmsg" id="sm_rest_${w}">✓ Saved!</div>
+        </div>
+      </div>`;
+
+    } else if(i===1){ // Tuesday Speed
+      html+=buildRunDay(i,'Tuesday',todayClass,todayBadge,dd,w,'SPEED RUN','#ff6b35','#1f0f00',plan.tue,'tue',data);
+    } else if(i===2){ // Wednesday Pull
+      html+=buildGymDay(i,'Wednesday',todayClass,todayBadge,dd,w,'PULL DAY','PULL DAY — Back & Biceps',PULL,data);
+    } else if(i===3){ // Thursday Legs
+      html+=buildGymDay(i,'Thursday',todayClass,todayBadge,dd,w,'LEG DAY','LEG DAY — Quads, Hams & Calves',LEGS,data);
+    } else if(i===4){ // Friday Zone2
+      html+=buildRunDay(i,'Friday',todayClass,todayBadge,dd,w,'ZONE 2 RUN','#4a90d9','#001a2a',plan.fri,'fri',data);
+    } else if(i===5){ // Saturday Push
+      html+=buildGymDay(i,'Saturday',todayClass,todayBadge,dd,w,'PUSH DAY','PUSH DAY — Chest, Shoulders & Triceps',PUSH,data);
+    } else if(i===6){ // Sunday Long
+      html+=buildRunDay(i,'Sunday',todayClass,todayBadge,dd,w,'LONG RUN','#ff4444','#1a0000',plan.sun,'sun',data);
+    }
+  }
+
+  document.getElementById('main').innerHTML=html;
+
+  // Auto-open today
+  for(let i=0;i<7;i++){
+    if(isToday(i,w)){ openDay('d'+i); break; }
+  }
+}
+
+function buildRunDay(i,name,todayClass,todayBadge,dd,w,tagLabel,dotColor,tagBg,target,slot,data){
+  const tgt=target.split(' ')[0];
+  const sub=target.includes('·')?target.split('·').slice(1).join('·').trim():'';
+  const hasSub=sub?`<div class="runtgt-sub">${sub}</div>`:'';
+  const hasData=data['run_'+slot+'_dist']?'<span class="okbadge">✓</span>':'';
+  return `<div class="card${todayClass}">
+    <div class="chdr" onclick="tog('d${i}')">
+      <div class="chdr-l"><div class="dot" style="background:${dotColor}"></div>
+        <div><div class="dname">${name} ${todayBadge}${hasData}</div><div class="ddate">${dd}</div></div>
       </div>
-      <button class="savebtn" onclick="alert('Saved!')">SAVE</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="dtag" style="background:${tagBg};color:${dotColor}">${tagLabel}</span>
+        <span class="chev" id="chev_d${i}">▾</span>
+      </div>
+    </div>
+    <div class="tbody" id="body_d${i}">
+      <div class="runtgt">
+        <div><div style="font-size:9px;letter-spacing:1.5px;color:var(--m);text-transform:uppercase">Target</div>
+          <div class="runtgt-dist">${tgt}</div></div>
+        <div class="runtgt-r"><div class="runtgt-type">${tagLabel}</div>${hasSub}</div>
+      </div>
+      <div class="row2">
+        <div class="fgrp"><div class="flbl">Actual Dist (km)</div>
+          <input class="finp" type="number" step="0.1" placeholder="0.0"
+            id="run_${slot}_dist_${w}" value="${data['run_'+slot+'_dist']||''}"
+            oninput="as('run_${slot}_dist',this.value,${w})"/></div>
+        <div class="fgrp"><div class="flbl">Avg Pace</div>
+          <input class="finp" type="text" placeholder="6:30/km"
+            id="run_${slot}_pace_${w}" value="${data['run_'+slot+'_pace']||''}"
+            oninput="as('run_${slot}_pace',this.value,${w})"/></div>
+      </div>
+      <div class="row2">
+        <div class="fgrp"><div class="flbl">Avg Heart Rate</div>
+          <input class="finp" type="number" placeholder="145 bpm"
+            id="run_${slot}_hr_${w}" value="${data['run_'+slot+'_hr']||''}"
+            oninput="as('run_${slot}_hr',this.value,${w})"/></div>
+        <div class="fgrp"><div class="flbl">Total Time</div>
+          <input class="finp" type="text" placeholder="00:45:00"
+            id="run_${slot}_time_${w}" value="${data['run_'+slot+'_time']||''}"
+            oninput="as('run_${slot}_time',this.value,${w})"/></div>
+      </div>
+      <div class="fgrp" style="margin-bottom:0">
+        <div class="flbl" style="margin-bottom:4px">Nutrition / Feel Notes</div>
+        <textarea class="fta" placeholder="Pre-run oats ✓ · Gel at 30min · Energy level · Weather..."
+          id="run_${slot}_notes_${w}" oninput="as('run_${slot}_notes',this.value,${w})">${data['run_'+slot+'_notes']||''}</textarea>
+      </div>
+      <button class="savebtn" onclick="sv(${w},'${slot}')">SAVE SESSION</button>
+      <div class="savedmsg" id="sm_${slot}_${w}">✓ Saved!</div>
+    </div>
+  </div>`;
+}
+
+function buildGymDay(i,name,todayClass,todayBadge,dd,w,tagLabel,sectionTitle,exercises,data){
+  const hasData=data[exercises[0].id+'_s1w']?'<span class="okbadge">✓</span>':'';
+  let exHtml='';
+  exercises.forEach(ex=>{
+    const sug=suggested(ex,w);
+    const loaded=!ex.bw && sug!==ex.base+'kg';
+    const badge=loaded?'<span class="upbadge">↑ LOADED</span>':'';
+    let sets='';
+    for(let s=1;s<=3;s++){
+      sets+=`<div class="sgrp">
+        <div class="slbl">Set ${s}</div>
+        <div class="sinprow">
+          <input class="sinp" type="number" step="0.5" placeholder="kg"
+            id="${ex.id}_s${s}w_${w}" value="${data[ex.id+'_s'+s+'w']||''}"
+            oninput="as('${ex.id}_s${s}w',this.value,${w})"/>
+          <input class="sinp" type="number" placeholder="reps"
+            id="${ex.id}_s${s}r_${w}" value="${data[ex.id+'_s'+s+'r']||''}"
+            oninput="as('${ex.id}_s${s}r',this.value,${w})"/>
+        </div>
+        <div class="ssub">kg · reps</div>
+      </div>`;
+    }
+    exHtml+=`<div class="exblk">
+      <div class="exhdr">
+        <div><span class="exname">${ex.name}</span>${badge}</div>
+        <div><div class="extgt">${ex.tgt}</div><div class="exsug">${sug}</div></div>
+      </div>
+      <div class="srow">${sets}</div>
     </div>`;
   });
-  document.getElementById('main').innerHTML = html;
+  return `<div class="card${todayClass}">
+    <div class="chdr" onclick="tog('d${i}')">
+      <div class="chdr-l"><div class="dot" style="background:#e74c3c"></div>
+        <div><div class="dname">${name} ${todayBadge}${hasData}</div><div class="ddate">${dd}</div></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="dtag" style="background:#2a0000;color:#e74c3c">${tagLabel}</span>
+        <span class="chev" id="chev_d${i}">▾</span>
+      </div>
+    </div>
+    <div class="tbody" id="body_d${i}">
+      <div class="gsec">${sectionTitle}</div>
+      ${exHtml}
+      <button class="savebtn" onclick="sv(${w},'gym${i}')">SAVE SESSION</button>
+      <div class="savedmsg" id="sm_gym${i}_${w}">✓ Saved!</div>
+    </div>
+  </div>`;
 }
 
-function as(key,val,w){ const d=load(w); d[key]=val; save(w,d); }
+// ── ACTIONS ───────────────────────────────────────────────────────────────
+// Auto-save on every input
+function as(key,val,w){
+  const d=load(w);
+  d[key]=val;
+  save(w,d);
+}
+
+function sv(w,tag){
+  toast('✓ Session saved');
+  const el=document.getElementById('sm_'+tag+'_'+w);
+  if(el){el.style.display='block';setTimeout(()=>el.style.display='none',2500);}
+}
+
+function tog(id){
+  const b=document.getElementById('body_'+id);
+  const c=document.getElementById('chev_'+id);
+  if(!b)return;
+  const open=b.classList.contains('open');
+  b.classList.toggle('open',!open);
+  c.classList.toggle('open',!open);
+}
+function openDay(id){
+  const b=document.getElementById('body_'+id);
+  const c=document.getElementById('chev_'+id);
+  if(b){b.classList.add('open');c.classList.add('open');}
+}
+
+function changeWeek(dir){
+  CW=Math.max(1,Math.min(30,CW+dir));
+  render();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function jumpToday(){
+  CW=currentWeek();
+  render();
+  setTimeout(()=>{
+    const t=document.querySelector('.card.today');
+    if(t)t.scrollIntoView({behavior:'smooth',block:'center'});
+  },80);
+}
+
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;
+  el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),2200);
+}
+
+// ── EXPORT ────────────────────────────────────────────────────────────────
+function exportCSV(){
+  const ALL=[...PULL,...LEGS,...PUSH];
+  let rows=[['Week','Dates','Exercise/Field','Set','Value']];
+  for(let w=1;w<=30;w++){
+    const d=load(w);
+    if(!Object.keys(d).length)continue;
+    const dates=weekDates(w);
+    // runs
+    ['tue','fri','sun'].forEach(slot=>{
+      ['dist','pace','hr','time','notes'].forEach(f=>{
+        const v=d['run_'+slot+'_'+f];
+        if(v)rows.push([w,dates,'RUN_'+slot.toUpperCase(),f,v]);
+      });
+    });
+    // gym
+    ALL.forEach(ex=>{
+      for(let s=1;s<=3;s++){
+        const kg=d[ex.id+'_s'+s+'w'], rep=d[ex.id+'_s'+s+'r'];
+        if(kg||rep)rows.push([w,dates,ex.name,'Set'+s,(kg||'-')+'kg × '+(rep||'-')+'reps']);
+      }
+    });
+    if(d.bw)rows.push([w,dates,'Bodyweight','kg',d.bw]);
+    if(d.week_notes)rows.push([w,dates,'Weekly Notes','—',d.week_notes]);
+  }
+  const csv=rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='Sub4_Export_'+new Date().toISOString().split('T')[0]+'.csv';
+  a.click();
+  toast('⬇ Export downloaded');
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────
 render();
 </script>
 </body>
