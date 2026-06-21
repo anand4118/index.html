@@ -7,7 +7,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="SUB-4"/>
 <meta name="theme-color" content="#0a0a0a"/>
-<link rel="shortcut icon" href="icon.png" type="image/x-icon">
+<link rel="icon" type="image/png" href="icon.png"/>
+<link rel="apple-touch-icon" href="icon.png"/>
 <title>SUB-4 LOGBOOK</title>
 <style>
 :root{--r:#e74c3c;--rd:#c0392b;--rdim:rgba(231,76,60,0.13);--bg:#0a0a0a;--bg2:#111;--bg3:#1a1a1a;--bg4:#222;--b:#2a2a2a;--t:#f0f0f0;--m:#777}
@@ -20,6 +21,10 @@ input,textarea{font-family:inherit}
 .hdr-title{font-size:11px;font-weight:700;letter-spacing:3px;color:var(--r);text-transform:uppercase}
 .hdr-sub{font-size:9px;color:var(--m);letter-spacing:1px;margin-top:2px}
 .exp-btn{background:var(--r);color:#fff;border:none;font-size:10px;font-weight:700;letter-spacing:1.5px;padding:7px 14px;border-radius:4px;cursor:pointer;text-transform:uppercase}
+.hdr-btns{display:flex;gap:6px;margin-top:8px}
+.coach-btn{flex:1;background:var(--rdim);color:var(--r);border:1px solid var(--rd);font-size:10px;font-weight:700;letter-spacing:1.5px;padding:9px 10px;border-radius:4px;cursor:pointer;text-transform:uppercase}
+.coach-btn:active{background:rgba(231,76,60,0.25)}
+.key-btn{flex:0 0 auto;background:var(--bg3);border:1px solid var(--b);color:var(--m);font-size:13px;padding:9px 12px;border-radius:4px;cursor:pointer}
 
 .wnav{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--bg2);border-bottom:1px solid var(--b)}
 .nbtn{background:var(--bg3);border:1px solid var(--b);color:var(--t);width:40px;height:40px;border-radius:8px;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
@@ -95,6 +100,11 @@ input,textarea{font-family:inherit}
 .savebtn:active{background:var(--rd)}
 .savedmsg{text-align:center;font-size:10px;color:#4caf50;letter-spacing:1px;margin-top:6px;display:none}
 .upbadge{font-size:8px;background:#1a3a1a;color:#4caf50;border:1px solid #2d5a2d;padding:2px 6px;border-radius:3px;letter-spacing:.5px;margin-left:6px}
+.platbadge{font-size:8px;background:#3a2e00;color:#e7b23c;border:1px solid #5a4500;padding:2px 6px;border-radius:3px;letter-spacing:.5px;margin-left:6px}
+.dlbadge{font-size:8px;background:#3a1a1a;color:#e76a6a;border:1px solid #5a2d2d;padding:2px 6px;border-radius:3px;letter-spacing:.5px;margin-left:6px}
+.recbadge{font-size:8px;background:#0f1f2e;color:#7ec8e3;border:1px solid #1f3a4e;padding:2px 6px;border-radius:3px;letter-spacing:.5px;margin-left:6px}
+.chartbtn{cursor:pointer;font-size:11px;margin-left:5px;opacity:.75}
+.chartbtn:active{opacity:1}
 
 .rest-box{text-align:center;padding:20px 0}
 .rest-emoji{font-size:30px}
@@ -102,6 +112,16 @@ input,textarea{font-family:inherit}
 
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--bg3);border:1px solid var(--r);color:var(--t);font-size:11px;font-weight:600;letter-spacing:1px;padding:10px 22px;border-radius:20px;transition:transform .3s;z-index:999;white-space:nowrap;pointer-events:none}
 .toast.show{transform:translateX(-50%) translateY(0)}
+
+.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,0.78);display:none;align-items:center;justify-content:center;z-index:1000;padding:18px}
+.modal-ov.show{display:flex}
+.modal-box{background:var(--bg2);border:1px solid var(--b);border-radius:10px;padding:16px;width:100%;max-width:420px;max-height:82vh;overflow-y:auto}
+.modal-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.modal-title{font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--r);text-transform:uppercase}
+.modal-close{background:var(--bg3);border:1px solid var(--b);color:var(--t);width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:13px}
+.coach-body{font-size:13px;line-height:1.65;color:var(--t)}
+.coach-loading{text-align:center;color:var(--m);font-size:10px;letter-spacing:1.5px;padding:24px 0;text-transform:uppercase}
+.coach-foot{font-size:9px;color:var(--m);margin-top:14px;text-align:center;letter-spacing:.5px}
 </style>
 </head>
 <body>
@@ -113,6 +133,10 @@ input,textarea{font-family:inherit}
       <div class="hdr-sub">HYBRID ATHLETE · TATA MUMBAI JAN 17 2027</div>
     </div>
     <button class="exp-btn" onclick="exportCSV()">⬇ EXPORT</button>
+  </div>
+  <div class="hdr-btns">
+    <button class="coach-btn" onclick="askCoach()">🤖 ASK AI COACH</button>
+    <button class="key-btn" onclick="setApiKeyPrompt()" title="Set Gemini API key">⚙</button>
   </div>
 </div>
 
@@ -136,6 +160,28 @@ input,textarea{font-family:inherit}
 <div class="main" id="main"></div>
 <div class="toast" id="toast"></div>
 
+<div class="modal-ov" id="chartModal">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <div class="modal-title" id="chartTitle">Progression</div>
+      <button class="modal-close" onclick="closeModal('chartModal')">✕</button>
+    </div>
+    <canvas id="progressCanvas" height="220"></canvas>
+  </div>
+</div>
+
+<div class="modal-ov" id="coachModal">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <div class="modal-title">🤖 AI Coach</div>
+      <button class="modal-close" onclick="closeModal('coachModal')">✕</button>
+    </div>
+    <div class="coach-body" id="coachBody"></div>
+    <div class="coach-foot">Powered by Gemini · key stored only on this device</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 // ── DATA ──────────────────────────────────────────────────────────────────
 const START = new Date('2026-06-22T00:00:00');
@@ -203,19 +249,86 @@ function lkey(w){ return 'sub4_w'+w; }
 function load(w){ try{return JSON.parse(localStorage.getItem(lkey(w))||'{}')}catch{return {}} }
 function save(w,d){ localStorage.setItem(lkey(w),JSON.stringify(d)); }
 
-// ── PROGRESSIVE OVERLOAD ──────────────────────────────────────────────────
-// Reads ALL previous weeks from localStorage, adds 2.5kg per week where all 3 sets hit max reps
-function suggested(ex, weekNum){
-  if(ex.bw) return 'BW';
-  let kg = ex.base;
+// last-viewed-week persistence (so the app opens where you left off, not Week 1)
+const LASTWEEK_KEY='sub4_lastweek';
+function getLastWeek(){
+  const v=parseInt(localStorage.getItem(LASTWEEK_KEY),10);
+  return (v>=1 && v<=30) ? v : null;
+}
+function setLastWeek(w){ localStorage.setItem(LASTWEEK_KEY, w); }
+
+// ── PROGRESSIVE OVERLOAD & AUTOREGULATION ───────────────────────────────────
+// Parses "3×8-12" into {sets:3, min:8, max:12}
+function parseTarget(tgt){
+  const m = tgt.match(/(\d+)×(\d+)-(\d+)/);
+  if(!m) return null;
+  return {sets:+m[1], min:+m[2], max:+m[3]};
+}
+
+// A week counts as "fatigued" if it's a PEAK long-run week on the plan,
+// or last week's logged long run was unusually large — gym targets should
+// not be pushed harder while running volume/fatigue is high.
+function isFatiguedWeek(w){
+  const plan = WPLAN[w-1];
+  if(!plan) return false;
+  if(/PEAK/i.test(plan.sun)) return true;
+  if(w>1){
+    const prevSun = parseFloat(load(w-1)['run_sun_dist']||'0');
+    if(prevSun >= 26) return true;
+  }
+  return false;
+}
+
+// Walks every prior logged week for this exercise and decides this week's
+// weight + coaching status:
+//  - progress: hit full target reps on all 3 sets -> +2.5kg
+//  - plateau:  missed full reps 2+ weeks running (not a true failure) -> hold weight, push reps instead
+//  - deload:   reps fell well short of the target (failure) -> -5 to -10% weight
+//  - recovery: would have progressed, but running volume this week is high -> hold weight
+function analyzeExercise(ex, weekNum){
+  if(ex.bw) return {weight:null, text:'BW', status:'bw'};
+
+  const t = parseTarget(ex.tgt);
+  let weight = ex.base;
+  let missStreak = 0;
+  let status = 'progress';
+
   for(let w=1; w<weekNum; w++){
     const d = load(w);
-    const r1 = parseInt(d[ex.id+'_s1r']||'0');
-    const r2 = parseInt(d[ex.id+'_s2r']||'0');
-    const r3 = parseInt(d[ex.id+'_s3r']||'0');
-    if(r1>=ex.max && r2>=ex.max && r3>=ex.max) kg+=2.5;
+    const raw1=d[ex.id+'_s1r'], raw2=d[ex.id+'_s2r'], raw3=d[ex.id+'_s3r'];
+    if(!raw1 && !raw2 && !raw3) continue; // no data logged that week — don't break streaks on gaps
+
+    const r1=parseInt(raw1||'0',10), r2=parseInt(raw2||'0',10), r3=parseInt(raw3||'0',10);
+    const avg=(r1+r2+r3)/3;
+    const hitFull = t ? (r1>=t.max && r2>=t.max && r3>=t.max) : false;
+    const isFailure = t ? (avg < t.min*0.7) : false; // well below even the bottom of the rep range
+
+    if(hitFull){
+      weight += 2.5;
+      missStreak = 0;
+      status = 'progress';
+    } else if(isFailure){
+      weight = Math.round((weight*0.925)*2)/2; // ~7.5% deload, rounded to nearest 0.5kg
+      missStreak = 0; // fresh attempt after a deload
+      status = 'deload';
+    } else {
+      missStreak++;
+      status = missStreak>=2 ? 'plateau' : 'progress';
+    }
   }
-  return kg+'kg';
+
+  // Gym/run balance check — don't load up the very week running fatigue peaks
+  if(isFatiguedWeek(weekNum) && status==='progress' && missStreak===0){
+    status='recovery';
+  }
+
+  let text;
+  if(status==='deload')        text = weight+'kg ↓';
+  else if(status==='plateau')  text = weight+'kg · +reps';
+  else if(status==='recovery') text = weight+'kg · hold';
+  else                          text = weight+'kg';
+
+  return {weight, text, status};
 }
 
 // ── DATE HELPERS ──────────────────────────────────────────────────────────
@@ -248,10 +361,14 @@ function dayDate(idx,w){
 }
 
 // ── STATE ─────────────────────────────────────────────────────────────────
-let CW = currentWeek();
+// Opens to the last week you worked on, falling back to today's calendar week
+// only on a brand-new device with no saved progress.
+let CW = getLastWeek() || currentWeek();
 
 // ── RENDER ────────────────────────────────────────────────────────────────
 function render(){
+  setLastWeek(CW);
+
   const w=CW, plan=WPLAN[w-1], data=load(w);
   document.getElementById('wlbl').textContent='WEEK '+w;
   document.getElementById('wdts').textContent=weekDates(w);
@@ -377,9 +494,14 @@ function buildGymDay(i,name,todayClass,todayBadge,dd,w,tagLabel,sectionTitle,exe
   const hasData=data[exercises[0].id+'_s1w']?'<span class="okbadge">✓</span>':'';
   let exHtml='';
   exercises.forEach(ex=>{
-    const sug=suggested(ex,w);
-    const loaded=!ex.bw && sug!==ex.base+'kg';
-    const badge=loaded?'<span class="upbadge">↑ LOADED</span>':'';
+    const an=analyzeExercise(ex,w);
+    const sug=an.text;
+    let badge='';
+    if(an.status==='progress' && !ex.bw && an.weight>ex.base) badge='<span class="upbadge">↑ LOADED</span>';
+    else if(an.status==='plateau') badge='<span class="platbadge">⚠ PLATEAU</span>';
+    else if(an.status==='deload') badge='<span class="dlbadge">↓ DELOAD</span>';
+    else if(an.status==='recovery') badge='<span class="recbadge">🌙 RECOVERY</span>';
+    const chartBtn = !ex.bw ? `<span class="chartbtn" onclick="showProgressChart('${ex.id}','${ex.name.replace(/'/g,"\\'")}')">📈</span>` : '';
     let sets='';
     for(let s=1;s<=3;s++){
       sets+=`<div class="sgrp">
@@ -397,7 +519,7 @@ function buildGymDay(i,name,todayClass,todayBadge,dd,w,tagLabel,sectionTitle,exe
     }
     exHtml+=`<div class="exblk">
       <div class="exhdr">
-        <div><span class="exname">${ex.name}</span>${badge}</div>
+        <div><span class="exname">${ex.name}</span>${badge}${chartBtn}</div>
         <div><div class="extgt">${ex.tgt}</div><div class="exsug">${sug}</div></div>
       </div>
       <div class="srow">${sets}</div>
@@ -469,6 +591,116 @@ function toast(msg){
   el.textContent=msg;
   el.classList.add('show');
   setTimeout(()=>el.classList.remove('show'),2200);
+}
+
+// ── MODALS ────────────────────────────────────────────────────────────────
+function openModal(id){ document.getElementById(id).classList.add('show'); }
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+
+// ── PROGRESS CHART (Chart.js) ───────────────────────────────────────────────
+let chartInst=null;
+function getWeightSeries(exId){
+  const labels=[], vals=[];
+  for(let w=1; w<=30; w++){
+    const d=load(w);
+    const ws=[d[exId+'_s1w'],d[exId+'_s2w'],d[exId+'_s3w']]
+      .map(v=>parseFloat(v)).filter(v=>!isNaN(v));
+    labels.push('W'+w);
+    vals.push(ws.length ? Math.max(...ws) : null);
+  }
+  return {labels,vals};
+}
+function showProgressChart(exId, exName){
+  const {labels,vals}=getWeightSeries(exId);
+  document.getElementById('chartTitle').textContent=exName+' — 30-Week Progression';
+  openModal('chartModal');
+  const ctx=document.getElementById('progressCanvas').getContext('2d');
+  if(chartInst) chartInst.destroy();
+  chartInst=new Chart(ctx,{
+    type:'line',
+    data:{labels, datasets:[{
+      label:'Weight (kg)', data:vals,
+      borderColor:'#e74c3c', backgroundColor:'rgba(231,76,60,0.15)',
+      spanGaps:true, tension:0.25, pointRadius:3, pointBackgroundColor:'#e74c3c', fill:true
+    }]},
+    options:{
+      responsive:true,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#777',font:{size:8}},grid:{color:'#1f1f1f'}},
+        y:{ticks:{color:'#777',font:{size:9}},grid:{color:'#1f1f1f'}}
+      }
+    }
+  });
+}
+
+// ── AI COACH (Gemini) ────────────────────────────────────────────────────────
+// NOTE ON SECURITY: this app is a single static HTML file with no backend, so
+// there is no way to call a paid API without the key living somewhere the
+// browser can read. Storing it in localStorage (never committed to the repo)
+// means it's only ever readable on this device, not by visitors to your
+// public GitHub Pages URL. If you ever want stronger protection, route this
+// fetch through a small serverless proxy (e.g. a Cloudflare Worker) that
+// holds the key server-side instead.
+const GEMINI_KEY_LS='sub4_gemini_key';
+function getApiKey(){ return localStorage.getItem(GEMINI_KEY_LS)||''; }
+function setApiKeyPrompt(){
+  const cur=getApiKey();
+  const k=prompt('Enter your Gemini API key (stored only in this browser, on this device):', cur||'');
+  if(k!==null){
+    localStorage.setItem(GEMINI_KEY_LS,k.trim());
+    toast(k.trim() ? '✓ API key saved' : '✓ API key cleared');
+  }
+}
+
+function buildWeekSummary(w){
+  const d=load(w);
+  const plan=WPLAN[w-1];
+  const lines=[`Week ${w} of 30.`];
+
+  ['tue','fri','sun'].forEach(slot=>{
+    const dist=d['run_'+slot+'_dist'], pace=d['run_'+slot+'_pace'], hr=d['run_'+slot+'_hr'];
+    if(dist) lines.push(`${slot.toUpperCase()} run — target: ${plan[slot]}, actual: ${dist}km${pace?' @ '+pace:''}${hr?', HR '+hr+'bpm':''}`);
+  });
+
+  const ALL=[...PULL,...LEGS,...PUSH];
+  ALL.forEach(ex=>{
+    const r1=d[ex.id+'_s1r'], r2=d[ex.id+'_s2r'], r3=d[ex.id+'_s3r'];
+    const w1=d[ex.id+'_s1w'];
+    if(r1||r2||r3){
+      lines.push(`${ex.name} (target ${ex.tgt}): ${w1||'BW'}kg × [${r1||'-'},${r2||'-'},${r3||'-'}] reps`);
+    }
+  });
+
+  if(d.bw) lines.push(`Bodyweight: ${d.bw}kg`);
+  if(d.week_notes) lines.push(`Notes: ${d.week_notes}`);
+  return lines.join('\n');
+}
+
+async function askCoach(){
+  const key=getApiKey();
+  if(!key){ setApiKeyPrompt(); return; }
+
+  openModal('coachModal');
+  const body=document.getElementById('coachBody');
+  body.innerHTML='<div class="coach-loading">🤖 Analyzing Week '+CW+'…</div>';
+
+  const summary=buildWeekSummary(CW);
+  const prompt=`Act as a professional Ironman 70.3 coach. Analyze my data: ${summary}. Detect any performance plateaus, compare my running fatigue against my gym performance, and provide 1-2 sentences of specific advice to either push harder or prioritize recovery.`;
+
+  try{
+    const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key='+encodeURIComponent(key),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})
+    });
+    const json=await res.json();
+    if(json.error) throw new Error(json.error.message || 'API error');
+    const text=json.candidates?.[0]?.content?.parts?.[0]?.text;
+    body.textContent = text || 'The coach had no advice this time — try again after logging more sets.';
+  }catch(err){
+    body.innerHTML = `<div style="color:#e76a6a;font-size:12px">⚠ Couldn't reach the AI coach.<br><br>${(err.message||'Unknown error')}<br><br>Tap the ⚙ button to check your API key.</div>`;
+  }
 }
 
 // ── EXPORT ────────────────────────────────────────────────────────────────
