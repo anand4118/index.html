@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -145,6 +144,10 @@ input,textarea{font-family:inherit}
   <div class="hdr-btns">
     <button class="coach-btn" onclick="askCoach()">🤖 ASK AI COACH</button>
     <button class="key-btn" onclick="setApiKeyPrompt()" title="Set Gemini API key">⚙</button>
+  </div>
+  <div class="hdr-btns">
+    <button class="coach-btn" id="stravaBtn" style="color:#fc5200;border-color:#fc5200;background:rgba(252,82,0,0.1)" onclick="stravaButtonClick()">🔗 CONNECT STRAVA</button>
+    <button class="key-btn" onclick="setStravaSettingsPrompt()" title="Strava settings">⚙</button>
   </div>
 </div>
 
@@ -874,6 +877,182 @@ function exportCSV(){
   a.click();
   toast('⬇ Export downloaded');
 }
+
+// ── STRAVA INTEGRATION ──────────────────────────────────────────────────
+// Strava's /oauth/token endpoint doesn't support browser CORS — that's a
+// restriction on Strava's servers, confirmed in their own developer forum,
+// not something fixable from this file alone. So that one step (and only
+// that step) is proxied through a small Cloudflare Worker you deploy
+// yourself. Your Client Secret lives in that Worker's environment variables
+// and never touches this page, your phone, or this repo. Fetching your
+// actual activities happens straight from the browser once you have a token.
+const STRAVA_LS_CREDS='sub4_strava_creds';     // {client_id, worker_url}
+const STRAVA_LS_TOKENS='sub4_strava_tokens';   // {access_token, refresh_token, expires_at}
+const STRAVA_LS_LASTSYNC='sub4_strava_lastsync';
+
+function getStravaCreds(){ try{return JSON.parse(localStorage.getItem(STRAVA_LS_CREDS)||'null')}catch{return null} }
+function setStravaCreds(c){ localStorage.setItem(STRAVA_LS_CREDS, JSON.stringify(c)); }
+function getStravaTokens(){ try{return JSON.parse(localStorage.getItem(STRAVA_LS_TOKENS)||'null')}catch{return null} }
+function setStravaTokens(t){ localStorage.setItem(STRAVA_LS_TOKENS, JSON.stringify(t)); }
+
+function setStravaSettingsPrompt(){
+  const cur=getStravaCreds()||{};
+  const id=prompt('Strava Client ID (from strava.com/settings/api):', cur.client_id||'');
+  if(id===null) return;
+  const worker=prompt('Your Cloudflare Worker URL (e.g. https://sub4-strava.yourname.workers.dev):', cur.worker_url||'');
+  if(worker===null) return;
+  setStravaCreds({client_id:id.trim(), worker_url:worker.trim().replace(/\/$/,'')});
+  toast('✓ Strava settings saved');
+}
+
+function stravaButtonClick(){
+  getStravaTokens() ? syncStrava(false) : connectStrava();
+}
+function updateStravaButton(){
+  const btn=document.getElementById('stravaBtn');
+  if(btn) btn.textContent = getStravaTokens() ? '🔄 SYNC STRAVA' : '🔗 CONNECT STRAVA';
+}
+
+function connectStrava(){
+  const creds=getStravaCreds();
+  if(!creds || !creds.client_id || !creds.worker_url){
+    setStravaSettingsPrompt();
+    toast('Now tap CONNECT STRAVA again');
+    return;
+  }
+  const redirect=location.origin+location.pathname;
+  const url='https://www.strava.com/oauth/authorize?client_id='+encodeURIComponent(creds.client_id)
+    +'&response_type=code&redirect_uri='+encodeURIComponent(redirect)
+    +'&approval_prompt=auto&scope=activity:read_all';
+  location.href=url;
+}
+
+async function exchangeStravaCode(code){
+  const creds=getStravaCreds();
+  if(!creds || !creds.worker_url){ toast('⚠ Tap the Strava ⚙ to finish setup first'); return; }
+  try{
+    const res=await fetch(creds.worker_url+'/token',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({grant_type:'authorization_code', code})
+    });
+    const json=await res.json();
+    if(!json.access_token) throw new Error(json.message||'Strava auth failed');
+    setStravaTokens({access_token:json.access_token, refresh_token:json.refresh_token, expires_at:json.expires_at});
+    toast('✓ Strava connected — pulling your runs…');
+    history.replaceState({}, document.title, location.pathname);
+    updateStravaButton();
+    await syncStrava(true);
+  }catch(err){
+    toast('⚠ Strava connection failed — check your Worker URL/Client ID');
+  }
+}
+
+async function ensureStravaToken(){
+  const t=getStravaTokens(), creds=getStravaCreds();
+  if(!t || !creds) return null;
+  const now=Math.floor(Date.now()/1000);
+  if(t.expires_at && t.expires_at>now+60) return t.access_token;
+  try{
+    const res=await fetch(creds.worker_url+'/token',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({grant_type:'refresh_token', refresh_token:t.refresh_token})
+    });
+    const json=await res.json();
+    if(!json.access_token) return null;
+    const fresh={access_token:json.access_token, refresh_token:json.refresh_token||t.refresh_token, expires_at:json.expires_at};
+    setStravaTokens(fresh);
+    return fresh.access_token;
+  }catch{ return null; }
+}
+
+// Maps a calendar date onto this program's Week/Slot grid (Tue/Fri/Sun runs)
+function weekSlotForDate(date){
+  const diffDays=Math.floor((date.getTime()-START.getTime())/86400000);
+  if(diffDays<0) return null;
+  const week=Math.floor(diffDays/7)+1;
+  if(week<1 || week>30) return null;
+  const slotMap={1:'tue',4:'fri',6:'sun'};
+  const slot=slotMap[diffDays%7];
+  return slot ? {week,slot} : null;
+}
+function fmtPace(speedMS){
+  if(!speedMS) return '';
+  const secPerKm=1000/speedMS;
+  const m=Math.floor(secPerKm/60), s=Math.round(secPerKm%60);
+  return m+':'+String(s).padStart(2,'0')+'/km';
+}
+function fmtDuration(sec){
+  const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=Math.round(sec%60);
+  return [h,m,s].map(v=>String(v).padStart(2,'0')).join(':');
+}
+
+async function syncStrava(silent){
+  const token=await ensureStravaToken();
+  const creds=getStravaCreds();
+  if(!token || !creds){ if(!silent) toast('⚠ Connect Strava first'); return; }
+
+  // First sync ever pulls from Day 1 of Week 1 onward, backfilling any runs
+  // you'd already logged on Strava before connecting. After that, it only
+  // looks at what's new since the last check.
+  const lastSync=parseInt(localStorage.getItem(STRAVA_LS_LASTSYNC)||'0',10);
+  const after = lastSync ? (lastSync-86400) : Math.floor(START.getTime()/1000);
+
+  try{
+    let activities=[], page=1;
+    while(true){
+      const res=await fetch(creds.worker_url+'/activities?after='+after+'&page='+page,{
+        headers:{'Authorization':'Bearer '+token}
+      });
+      const json=await res.json();
+      if(!Array.isArray(json) || json.length===0) break;
+      activities=activities.concat(json);
+      if(json.length<100) break;
+      page++;
+    }
+
+    let updated=0;
+    activities.forEach(act=>{
+      if(act.type!=='Run') return;
+      const d=new Date(act.start_date_local);
+      d.setHours(0,0,0,0);
+      const loc=weekSlotForDate(d);
+      if(!loc) return;
+
+      const wd=load(loc.week);
+      const distKey='run_'+loc.slot+'_dist', idKey='run_'+loc.slot+'_stravaid';
+      if(wd[idKey]===String(act.id)) return;                  // already synced this exact activity
+      if(wd[distKey] && wd[idKey]===undefined) return;        // a manual entry is already there — don't clobber it
+
+      wd[distKey]=(act.distance/1000).toFixed(2);
+      wd['run_'+loc.slot+'_pace']=fmtPace(act.average_speed);
+      if(act.average_heartrate) wd['run_'+loc.slot+'_hr']=Math.round(act.average_heartrate);
+      wd['run_'+loc.slot+'_time']=fmtDuration(act.moving_time);
+      wd['run_'+loc.slot+'_notes']=(wd['run_'+loc.slot+'_notes']?wd['run_'+loc.slot+'_notes']+' · ':'')+'🔗 '+(act.name||'Run')+' (Strava)';
+      wd[idKey]=String(act.id);
+      save(loc.week, wd);
+      updated++;
+    });
+
+    localStorage.setItem(STRAVA_LS_LASTSYNC, Math.floor(Date.now()/1000));
+    if(updated) toast('🔄 Synced '+updated+' run'+(updated>1?'s':'')+' from Strava');
+    else if(!silent) toast('✓ Strava up to date');
+    if(updated) render();
+  }catch(err){
+    if(!silent) toast('⚠ Strava sync failed — check your Worker is deployed');
+  }
+}
+
+// On load: finish OAuth if we just got redirected back with a code,
+// otherwise silently check for new activities if already connected.
+(function(){
+  const params=new URLSearchParams(location.search);
+  const code=params.get('code');
+  if(code) exchangeStravaCode(code);
+  else if(getStravaTokens()) syncStrava(true);
+  updateStravaButton();
+})();
 
 // ── SWIPE GESTURE (mobile week nav) ─────────────────────────────────────────
 let touchStartX=null;
