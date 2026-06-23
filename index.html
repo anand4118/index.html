@@ -112,6 +112,14 @@ input,textarea{font-family:inherit}
 .loadnum{font-size:18px;font-weight:700;color:var(--r)}
 .loadlbl{font-size:8px;color:var(--m);letter-spacing:1px;text-transform:uppercase;margin-top:2px}
 .prtoast{color:#ffd54a!important;border-color:#ffd54a!important}
+.util-btn{flex:1;background:var(--bg3);border:1px solid var(--b);color:var(--t);font-size:9px;font-weight:700;letter-spacing:1px;padding:8px 6px;border-radius:4px;cursor:pointer;text-transform:uppercase;text-align:center}
+.xttoggle{display:flex;align-items:center;justify-content:space-between;padding:8px 0;cursor:pointer}
+.xtlbl{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--m);text-transform:uppercase}
+.pacetbl{width:100%;font-size:12px;border-collapse:collapse}
+.pacetbl td{padding:6px 0}
+.pacetbl tr.hd td{color:var(--m);font-size:9px;letter-spacing:1px;text-transform:uppercase}
+.pacetbl tr.row{border-top:1px solid var(--b)}
+.addcd{padding:10px;text-align:center;cursor:pointer;color:var(--m);font-size:10px;letter-spacing:1px;margin-bottom:12px}
 
 .rest-box{text-align:center;padding:20px 0}
 .rest-emoji{font-size:30px}
@@ -139,15 +147,24 @@ input,textarea{font-family:inherit}
       <div class="hdr-title">⚡ SUB-4 LOGBOOK</div>
       <div class="hdr-sub">HYBRID ATHLETE · TATA MUMBAI JAN 17 2027</div>
     </div>
-    <button class="exp-btn" onclick="exportCSV()">⬇ EXPORT</button>
+    <div style="display:flex;gap:6px">
+      <button class="key-btn" onclick="cycleTheme()" title="Change accent color">🎨</button>
+      <button class="exp-btn" onclick="exportCSV()">⬇ EXPORT</button>
+    </div>
   </div>
   <div class="hdr-btns">
-    <button class="coach-btn" onclick="askCoach()">🤖 ASK AI COACH</button>
+    <button class="coach-btn" onclick="askCoach()">🤖 FULL WEEK REVIEW <span id="weekProgBadge" style="opacity:0.7"></span></button>
+    <button class="key-btn" onclick="askTrendSummary()" title="4-week trend summary">📊</button>
     <button class="key-btn" onclick="setApiKeyPrompt()" title="Set Gemini API key">⚙</button>
   </div>
   <div class="hdr-btns">
     <button class="coach-btn" id="stravaBtn" style="color:#fc5200;border-color:#fc5200;background:rgba(252,82,0,0.1)" onclick="stravaButtonClick()">🔗 CONNECT STRAVA</button>
     <button class="key-btn" onclick="setStravaSettingsPrompt()" title="Strava settings">⚙</button>
+  </div>
+  <div class="hdr-btns">
+    <button class="util-btn" onclick="backupData()">💾 BACKUP DATA</button>
+    <label class="util-btn" for="restoreFile" style="margin:0">📤 RESTORE</label>
+    <input type="file" id="restoreFile" accept=".json" style="display:none" onchange="restoreData(this.files[0])"/>
   </div>
 </div>
 
@@ -277,15 +294,20 @@ function parseTarget(tgt){
 }
 
 // A week counts as "fatigued" if it's a PEAK long-run week on the plan,
-// or last week's logged long run was unusually large — gym targets should
-// not be pushed harder while running volume/fatigue is high.
+// last week's logged long run was unusually large, or your own logged
+// recovery signals (soreness, sleep) point to high fatigue — gym targets
+// should not be pushed harder under any of those conditions.
 function isFatiguedWeek(w){
   const plan = WPLAN[w-1];
   if(!plan) return false;
   if(/PEAK/i.test(plan.sun)) return true;
   if(w>1){
-    const prevSun = parseFloat(load(w-1)['run_sun_dist']||'0');
+    const prev = load(w-1);
+    const prevSun = parseFloat(prev['run_sun_dist']||'0');
     if(prevSun >= 26) return true;
+    const soreness = parseInt(prev.soreness||'0',10);
+    if(soreness >= 4) return true;
+    if(prev.sleep_hrs && parseFloat(prev.sleep_hrs) < 6) return true;
   }
   return false;
 }
@@ -381,7 +403,9 @@ function weekStats(w){
   [PULL,LEGS,PUSH].forEach(grp=>{
     if(d[grp[0].id+'_s1w']!==undefined && d[grp[0].id+'_s1w']!=='') gymCount++;
   });
-  return {runKm, runCount, gymCount};
+  const swimKm = (parseFloat(d.swim_dist||'0')||0)/1000; // stored in meters
+  const bikeKm = parseFloat(d.bike_dist||'0')||0;
+  return {runKm, runCount, gymCount, swimKm, bikeKm};
 }
 
 // ── STATE ─────────────────────────────────────────────────────────────────
@@ -400,27 +424,44 @@ function render(){
   document.getElementById('pfill').style.width=pct+'%';
   document.getElementById('plbl').textContent='Week '+w+' of 30 · '+pct+'% complete';
 
+  const badge=document.getElementById('weekProgBadge');
+  if(badge) badge.textContent='('+daysLoggedCount(w)+'/7 days)';
+
   const DNAMES=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
   let html='';
 
-  // Countdown
+  // Countdown(s)
   html+=`<div class="cd"><div class="cd-num">${daysLeft()}</div><div class="cd-lbl">days to race day · Jan 17, 2027</div></div>`;
+  const d703=days703Left();
+  if(d703!==null){
+    html+=`<div class="cd" style="border-color:#fc5200;cursor:pointer" onclick="set703DatePrompt()"><div class="cd-num" style="color:#fc5200">${d703}</div><div class="cd-lbl">days to your 70.3 · tap to edit</div></div>`;
+  } else {
+    html+=`<div class="card addcd" onclick="set703DatePrompt()">+ ADD IRONMAN 70.3 COUNTDOWN</div>`;
+  }
 
-  // Weekly training load snapshot — run volume vs gym sessions completed,
-  // so you can see at a glance if running fatigue is stacking up this week
+  // Weekly training load snapshot
   const stats=weekStats(w);
   html+=`<div class="card loadcard">
     <div><div class="loadnum">${stats.runKm.toFixed(1)}km</div><div class="loadlbl">Run Volume</div></div>
     <div><div class="loadnum">${stats.runCount}/3</div><div class="loadlbl">Runs Logged</div></div>
     <div><div class="loadnum">${stats.gymCount}/3</div><div class="loadlbl">Gym Days</div></div>
   </div>`;
+  if(stats.swimKm>0 || stats.bikeKm>0){
+    html+=`<div class="card loadcard">
+      <div><div class="loadnum">${stats.swimKm.toFixed(1)}km</div><div class="loadlbl">Swim</div></div>
+      <div><div class="loadnum">${stats.bikeKm.toFixed(1)}km</div><div class="loadlbl">Bike</div></div>
+    </div>`;
+  }
+
+  // Pace calculator
+  html+=buildPaceCard();
 
   for(let i=0;i<7;i++){
     const tod=isToday(i,w), dd=dayDate(i,w);
     const todayClass=tod?' today':'';
     const todayBadge=tod?'<span class="tbadge">TODAY</span>':'';
 
-    if(i===0){ // Monday Rest
+    if(i===0){ // Monday Rest + Recovery + optional Cross-Training
       html+=`<div class="card${todayClass}">
         <div class="chdr" onclick="tog('d${i}')">
           <div class="chdr-l"><div class="dot" style="background:#444"></div>
@@ -438,32 +479,75 @@ function render(){
               value="${data.bw||''}" oninput="as('bw',this.value,${w})"/>
             <div style="font-size:11px;color:var(--m)">kg</div>
           </div>
+
+          <div class="flbl" style="margin-bottom:4px">Recovery <span class="chartbtn" onclick="showRecoveryChart()">📈</span></div>
+          <div class="row2" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:8px">
+            <div class="fgrp"><div class="flbl">Sleep (hrs)</div>
+              <input class="finp" type="number" step="0.5" placeholder="7.5" id="sleep_${w}"
+                value="${data.sleep_hrs||''}" oninput="as('sleep_hrs',this.value,${w})"/></div>
+            <div class="fgrp"><div class="flbl">Soreness 1-5</div>
+              <input class="finp" type="number" min="1" max="5" placeholder="2" id="sore_${w}"
+                value="${data.soreness||''}" oninput="as('soreness',this.value,${w})"/></div>
+            <div class="fgrp"><div class="flbl">Resting HR</div>
+              <input class="finp" type="number" placeholder="58" id="rhr_${w}"
+                value="${data.rhr||''}" oninput="as('rhr',this.value,${w})"/></div>
+          </div>
+
           <div class="rest-box"><div class="rest-emoji">🌙</div><div class="rest-lbl">Eat Well · Sleep Deep · Recover</div></div>
           <div class="div"></div>
-          <div class="flbl" style="margin-bottom:4px">Weekly Check-in (Sleep · Soreness · Nutrition)</div>
-          <textarea class="fta" placeholder="Sleep quality, soreness, energy, nutrition compliance..."
+
+          <div class="xttoggle" onclick="toggleXT(${w})">
+            <span class="xtlbl">🏊 🚴 Cross-Training (Optional)</span>
+            <span class="chev" id="xtchev_${w}">▾</span>
+          </div>
+          <div id="xtbody_${w}" style="display:none">
+            <div class="gsec" style="margin-top:6px">SWIM</div>
+            <div class="row2">
+              <div class="fgrp"><div class="flbl">Distance (m)</div>
+                <input class="finp" type="number" placeholder="1500" id="swimd_${w}"
+                  value="${data.swim_dist||''}" oninput="as('swim_dist',this.value,${w})"/></div>
+              <div class="fgrp"><div class="flbl">Time</div>
+                <input class="finp" type="text" placeholder="00:30:00" id="swimt_${w}"
+                  value="${data.swim_time||''}" oninput="as('swim_time',this.value,${w})"/></div>
+            </div>
+            <div class="gsec" style="margin-top:14px">BIKE</div>
+            <div class="row2">
+              <div class="fgrp"><div class="flbl">Distance (km)</div>
+                <input class="finp" type="number" step="0.1" placeholder="40" id="biked_${w}"
+                  value="${data.bike_dist||''}" oninput="as('bike_dist',this.value,${w})"/></div>
+              <div class="fgrp"><div class="flbl">Time</div>
+                <input class="finp" type="text" placeholder="01:15:00" id="biket_${w}"
+                  value="${data.bike_time||''}" oninput="as('bike_time',this.value,${w})"/></div>
+            </div>
+          </div>
+
+          <div class="div"></div>
+          <div class="flbl" style="margin-bottom:4px">Weekly Notes (Nutrition · Energy · Anything else)</div>
+          <textarea class="fta" placeholder="Nutrition compliance, energy levels, life stress..."
             id="wn_${w}" oninput="as('week_notes',this.value,${w})">${data.week_notes||''}</textarea>
           <button class="savebtn" onclick="sv(${w},'rest')">SAVE NOTES</button>
           <div class="savedmsg" id="sm_rest_${w}">✓ Saved!</div>
+          <button class="util-btn" style="width:100%;margin-top:8px" onclick="askRestDayCoach(${w},'Monday Recovery')">🤖 ASK COACH ABOUT TODAY</button>
         </div>
       </div>`;
 
     } else if(i===1){ // Tuesday Speed
       html+=buildRunDay(i,'Tuesday',todayClass,todayBadge,dd,w,'SPEED RUN','#ff6b35','#1f0f00',plan.tue,'tue',data);
     } else if(i===2){ // Wednesday Pull
-      html+=buildGymDay(i,'Wednesday',todayClass,todayBadge,dd,w,'PULL DAY','PULL DAY — Back & Biceps',PULL,data);
+      html+=buildGymDay(i,'Wednesday',todayClass,todayBadge,dd,w,'PULL DAY','PULL DAY — Back & Biceps',PULL,'PULL',data);
     } else if(i===3){ // Thursday Legs
-      html+=buildGymDay(i,'Thursday',todayClass,todayBadge,dd,w,'LEG DAY','LEG DAY — Quads, Hams & Calves',LEGS,data);
+      html+=buildGymDay(i,'Thursday',todayClass,todayBadge,dd,w,'LEG DAY','LEG DAY — Quads, Hams & Calves',LEGS,'LEGS',data);
     } else if(i===4){ // Friday Zone2
       html+=buildRunDay(i,'Friday',todayClass,todayBadge,dd,w,'ZONE 2 RUN','#4a90d9','#001a2a',plan.fri,'fri',data);
     } else if(i===5){ // Saturday Push
-      html+=buildGymDay(i,'Saturday',todayClass,todayBadge,dd,w,'PUSH DAY','PUSH DAY — Chest, Shoulders & Triceps',PUSH,data);
+      html+=buildGymDay(i,'Saturday',todayClass,todayBadge,dd,w,'PUSH DAY','PUSH DAY — Chest, Shoulders & Triceps',PUSH,'PUSH',data);
     } else if(i===6){ // Sunday Long
       html+=buildRunDay(i,'Sunday',todayClass,todayBadge,dd,w,'LONG RUN','#ff4444','#1a0000',plan.sun,'sun',data);
     }
   }
 
   document.getElementById('main').innerHTML=html;
+  updatePaceCalc();
 
   // Auto-open today
   for(let i=0;i<7;i++){
@@ -519,11 +603,12 @@ function buildRunDay(i,name,todayClass,todayBadge,dd,w,tagLabel,dotColor,tagBg,t
       </div>
       <button class="savebtn" onclick="sv(${w},'${slot}')">SAVE SESSION</button>
       <div class="savedmsg" id="sm_${slot}_${w}">✓ Saved!</div>
+      <button class="util-btn" style="width:100%;margin-top:8px" onclick="askRunDayCoach(${w},'${slot}','${name} — ${tagLabel}')">🤖 ASK COACH ABOUT THIS RUN</button>
     </div>
   </div>`;
 }
 
-function buildGymDay(i,name,todayClass,todayBadge,dd,w,tagLabel,sectionTitle,exercises,data){
+function buildGymDay(i,name,todayClass,todayBadge,dd,w,tagLabel,sectionTitle,exercises,groupKey,data){
   const hasData=data[exercises[0].id+'_s1w']?'<span class="okbadge">✓</span>':'';
   let exHtml='';
   exercises.forEach(ex=>{
@@ -573,6 +658,7 @@ function buildGymDay(i,name,todayClass,todayBadge,dd,w,tagLabel,sectionTitle,exe
       ${exHtml}
       <button class="savebtn" onclick="sv(${w},'gym${i}')">SAVE SESSION</button>
       <div class="savedmsg" id="sm_gym${i}_${w}">✓ Saved!</div>
+      <button class="util-btn" style="width:100%;margin-top:8px" onclick="askGymDayCoach(${w},'${groupKey}','${name} — ${tagLabel}')">🤖 ASK COACH ABOUT THIS SESSION</button>
     </div>
   </div>`;
 }
@@ -792,8 +878,20 @@ function buildWeekSummary(w){
   });
 
   if(d.bw) lines.push(`Bodyweight: ${d.bw}kg`);
+  if(d.sleep_hrs) lines.push(`Sleep: ${d.sleep_hrs}h, soreness ${d.soreness||'-'}/5, resting HR ${d.rhr||'-'}`);
+  if(d.swim_dist) lines.push(`Swim: ${(parseFloat(d.swim_dist)/1000).toFixed(2)}km`);
+  if(d.bike_dist) lines.push(`Bike: ${d.bike_dist}km`);
   if(d.week_notes) lines.push(`Notes: ${d.week_notes}`);
   return lines.join('\n');
+}
+
+function daysLoggedCount(w){
+  const d=load(w);
+  let count=0;
+  if(d.bw || d.sleep_hrs) count++;
+  ['tue','fri','sun'].forEach(s=>{ if(d['run_'+s+'_dist']) count++; });
+  [PULL,LEGS,PUSH].forEach(g=>{ if(d[g[0].id+'_s1w']) count++; });
+  return count;
 }
 
 async function callGemini(prompt, key){
@@ -806,27 +904,21 @@ async function callGemini(prompt, key){
   return {status:res.status, json};
 }
 
-async function askCoach(){
+// Shared runner for every coach call (full-week, per-day, trend) — handles
+// the loading state, the 503-overload auto-retry, and clear per-status errors.
+async function runCoachPrompt(loadingLabel, prompt){
   const key=getApiKey();
   if(!key){ setApiKeyPrompt(); return; }
-
   openModal('coachModal');
   const body=document.getElementById('coachBody');
-  body.innerHTML='<div class="coach-loading">🤖 Analyzing Week '+CW+'…</div>';
-
-  const summary=buildWeekSummary(CW);
-  const prompt=`Act as a professional Ironman 70.3 coach. Analyze my data: ${summary}. Detect any performance plateaus, compare my running fatigue against my gym performance, and provide 1-2 sentences of specific advice to either push harder or prioritize recovery.`;
-
+  body.innerHTML='<div class="coach-loading">🤖 '+loadingLabel+'…</div>';
   try{
     let {status, json} = await callGemini(prompt, key);
-
-    // Free-tier model overload (503) is transient — retry once after a short pause
     if(status===503){
       body.innerHTML='<div class="coach-loading">🤖 Coach is busy, retrying…</div>';
       await new Promise(r=>setTimeout(r,2500));
       ({status, json} = await callGemini(prompt, key));
     }
-
     if(status===401 || status===403){
       throw new Error('Your API key was rejected. Tap ⚙ and re-paste it — make sure there are no extra spaces, and that it was created at aistudio.google.com/app/apikey.');
     }
@@ -837,12 +929,95 @@ async function askCoach(){
       throw new Error("Gemini's servers are overloaded right now even after a retry. This is on Google's end — wait a minute and try again.");
     }
     if(json.error) throw new Error(json.error.message || ('API error '+status));
-
     const text=json.candidates?.[0]?.content?.parts?.[0]?.text;
-    body.textContent = text || 'The coach had no advice this time — try again after logging more sets.';
+    body.textContent = text || 'No feedback this time — log a bit more data and try again.';
   }catch(err){
     body.innerHTML = `<div style="color:#e76a6a;font-size:12px">⚠ Couldn't reach the AI coach.<br><br>${(err.message||'Unknown error')}</div>`;
   }
+}
+
+// ── FULL WEEK REVIEW ─────────────────────────────────────────────────────
+async function askCoach(){
+  if(daysLoggedCount(CW)===0){ toast('⚠ Log at least one session this week first'); return; }
+  const summary=buildWeekSummary(CW);
+  const prompt=`Act as a professional Ironman 70.3 coach. Analyze my full week of data: ${summary}. Detect any performance plateaus, compare my running fatigue against my gym performance, and provide 1-2 sentences of specific advice to either push harder or prioritize recovery this coming week.`;
+  await runCoachPrompt('Reviewing your full Week '+CW, prompt);
+}
+
+// ── PER-DAY REVIEWS ──────────────────────────────────────────────────────
+function buildRunDaySummary(w, slot){
+  const d=load(w), plan=WPLAN[w-1];
+  const dist=d['run_'+slot+'_dist'];
+  if(!dist) return null;
+  const pace=d['run_'+slot+'_pace'], hr=d['run_'+slot+'_hr'], time=d['run_'+slot+'_time'], notes=d['run_'+slot+'_notes'];
+  return `Target: ${plan[slot]}. Actual: ${dist}km${pace?' @ '+pace:''}${hr?', HR '+hr+'bpm':''}${time?', time '+time:''}${notes?'. Notes: '+notes:''}`;
+}
+async function askRunDayCoach(w, slot, label){
+  const summary=buildRunDaySummary(w, slot);
+  if(!summary){ toast('⚠ Log this run first'); return; }
+  const prompt=`Act as a professional Ironman 70.3 coach. Review just this single run session (${label}): ${summary}. Give 1-2 sentences of direct feedback on this session alone — on target, too easy, too hard, or a red flag — plus one concrete tip for next time.`;
+  await runCoachPrompt('Reviewing '+label, prompt);
+}
+
+const DAYGROUPS={PULL,LEGS,PUSH};
+function buildGymDaySummary(w, groupKey){
+  const d=load(w);
+  const exercises=DAYGROUPS[groupKey]||[];
+  const lines=[];
+  exercises.forEach(ex=>{
+    const r1=d[ex.id+'_s1r'], r2=d[ex.id+'_s2r'], r3=d[ex.id+'_s3r'], w1=d[ex.id+'_s1w'];
+    if(r1||r2||r3) lines.push(`${ex.name} (target ${ex.tgt}): ${w1||'BW'}kg × [${r1||'-'},${r2||'-'},${r3||'-'}]`);
+  });
+  return lines.length ? lines.join('; ') : null;
+}
+async function askGymDayCoach(w, groupKey, label){
+  const summary=buildGymDaySummary(w, groupKey);
+  if(!summary){ toast('⚠ Log this session first'); return; }
+  const prompt=`Act as a professional Ironman 70.3 coach. Review just this single gym session (${label}): ${summary}. Give 1-2 sentences of direct feedback on this session alone, including whether it looks like progress, a plateau, or overreaching — plus one concrete tip for next time.`;
+  await runCoachPrompt('Reviewing '+label, prompt);
+}
+
+function buildRecoveryDaySummary(w){
+  const d=load(w);
+  const parts=[];
+  if(d.bw) parts.push('Bodyweight '+d.bw+'kg');
+  if(d.sleep_hrs) parts.push(d.sleep_hrs+'h sleep');
+  if(d.soreness) parts.push('soreness '+d.soreness+'/5');
+  if(d.rhr) parts.push('resting HR '+d.rhr+'bpm');
+  if(d.swim_dist) parts.push((parseFloat(d.swim_dist)/1000).toFixed(2)+'km swim');
+  if(d.bike_dist) parts.push(d.bike_dist+'km bike');
+  if(d.week_notes) parts.push('Notes: '+d.week_notes);
+  return parts.length ? parts.join(', ') : null;
+}
+async function askRestDayCoach(w, label){
+  const summary=buildRecoveryDaySummary(w);
+  if(!summary){ toast('⚠ Log your bodyweight, sleep, or notes first'); return; }
+  const prompt=`Act as a professional Ironman 70.3 coach. Review just today's recovery data (${label}): ${summary}. Give 1-2 sentences on whether this looks like adequate recovery for someone in marathon/70.3 training, and one concrete recovery tip if needed.`;
+  await runCoachPrompt('Reviewing '+label, prompt);
+}
+
+// ── 4-WEEK TREND SUMMARY ─────────────────────────────────────────────────
+function buildTrendSummary(weekNum){
+  const startW=Math.max(1,weekNum-3);
+  const lines=[];
+  for(let w=startW; w<=weekNum; w++){
+    const d=load(w);
+    let runTotal=0;
+    ['tue','fri','sun'].forEach(s=>{ const v=parseFloat(d['run_'+s+'_dist']); if(v) runTotal+=v; });
+    const gymDays=[PULL,LEGS,PUSH].filter(g=>d[g[0].id+'_s1w']).length;
+    const extras=[];
+    if(d.swim_dist) extras.push((parseFloat(d.swim_dist)/1000).toFixed(1)+'km swim');
+    if(d.bike_dist) extras.push(d.bike_dist+'km bike');
+    if(d.sleep_hrs) extras.push(d.sleep_hrs+'h sleep');
+    if(d.soreness) extras.push('soreness '+d.soreness+'/5');
+    lines.push(`Week ${w}: ${runTotal.toFixed(1)}km running, ${gymDays}/3 gym days${extras.length?', '+extras.join(', '):''}.`);
+  }
+  return lines.join('\n');
+}
+async function askTrendSummary(){
+  const summary=buildTrendSummary(CW);
+  const prompt=`Act as a professional Ironman 70.3 coach reviewing the last 4 weeks of training data: ${summary}. Identify the overall trend (improving, plateauing, or overreaching), flag any concerning pattern between recovery and training load, and give 2-3 sentences of practical advice for the upcoming week.`;
+  await runCoachPrompt('Reviewing your last 4 weeks', prompt);
 }
 
 // ── EXPORT ────────────────────────────────────────────────────────────────
@@ -876,6 +1051,191 @@ function exportCSV(){
   a.download='Sub4_Export_'+new Date().toISOString().split('T')[0]+'.csv';
   a.click();
   toast('⬇ Export downloaded');
+}
+
+// ── BACKUP / RESTORE ─────────────────────────────────────────────────────
+// Your data only lives on this one phone's browser storage — this is the
+// only safety net against losing it (clearing browser data, a new phone, etc).
+function backupData(){
+  const dump={};
+  Object.keys(localStorage).forEach(k=>{ if(k.startsWith('sub4_')) dump[k]=localStorage.getItem(k); });
+  const blob=JSON.stringify(dump,null,2);
+  const a=document.createElement('a');
+  a.href='data:application/json;charset=utf-8,'+encodeURIComponent(blob);
+  a.download='Sub4_Backup_'+new Date().toISOString().split('T')[0]+'.json';
+  a.click();
+  toast('💾 Backup downloaded');
+}
+function restoreData(file){
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=(e)=>{
+    try{
+      const dump=JSON.parse(e.target.result);
+      if(!confirm('This will overwrite your current data with this backup. Continue?')) return;
+      Object.keys(dump).forEach(k=>localStorage.setItem(k, dump[k]));
+      toast('✓ Backup restored');
+      applyTheme();
+      CW=getLastWeek()||currentWeek();
+      render();
+    }catch(err){ toast('⚠ Invalid backup file'); }
+  };
+  reader.readAsText(file);
+}
+
+// ── THEME PICKER ──────────────────────────────────────────────────────────
+const THEMES=[
+  {name:'Red',    r:'#e74c3c', rd:'#c0392b'},
+  {name:'Blue',   r:'#4a90d9', rd:'#2e6da4'},
+  {name:'Green',  r:'#2ecc71', rd:'#27ae60'},
+  {name:'Purple', r:'#9b59b6', rd:'#8e44ad'},
+  {name:'Strava Orange', r:'#fc5200', rd:'#cc4400'}
+];
+function applyTheme(){
+  const idx=parseInt(localStorage.getItem('sub4_theme_idx')||'0',10);
+  const th=THEMES[idx]||THEMES[0];
+  document.documentElement.style.setProperty('--r', th.r);
+  document.documentElement.style.setProperty('--rd', th.rd);
+  document.documentElement.style.setProperty('--rdim', th.r+'22');
+}
+function cycleTheme(){
+  let idx=parseInt(localStorage.getItem('sub4_theme_idx')||'0',10);
+  idx=(idx+1)%THEMES.length;
+  localStorage.setItem('sub4_theme_idx', idx);
+  applyTheme();
+  toast('🎨 '+THEMES[idx].name+' theme');
+}
+
+// ── SECOND COUNTDOWN (IRONMAN 70.3) ─────────────────────────────────────
+function get703Date(){ return localStorage.getItem('sub4_70_3_date')||''; }
+function days703Left(){
+  const ds=get703Date();
+  if(!ds) return null;
+  const race=new Date(ds+'T00:00:00');
+  const t=new Date(); t.setHours(0,0,0,0);
+  return Math.max(0, Math.ceil((race-t)/86400000));
+}
+function set703DatePrompt(){
+  const cur=get703Date();
+  const d=prompt('Your Ironman 70.3 race date (YYYY-MM-DD). Leave blank to remove:', cur||'');
+  if(d===null) return;
+  if(d.trim()===''){ localStorage.removeItem('sub4_70_3_date'); toast('✓ 70.3 countdown removed'); }
+  else { localStorage.setItem('sub4_70_3_date', d.trim()); toast('✓ 70.3 countdown set'); }
+  render();
+}
+
+// ── PACE CALCULATOR ───────────────────────────────────────────────────────
+function getPaceSettings(){
+  try{ return JSON.parse(localStorage.getItem('sub4_pace_target')||'null') || {time:'4:00:00',dist:'marathon'}; }
+  catch{ return {time:'4:00:00',dist:'marathon'}; }
+}
+function savePaceSettings(time,dist){ localStorage.setItem('sub4_pace_target', JSON.stringify({time,dist})); }
+function parseHMS(str){
+  const p=String(str).split(':').map(Number).filter(n=>!isNaN(n));
+  if(p.length===3) return p[0]*3600+p[1]*60+p[2];
+  if(p.length===2) return p[0]*60+p[1];
+  return 0;
+}
+function fmtPaceSec(sec){
+  if(!sec) return '—';
+  const m=Math.floor(sec/60), s=Math.round(sec%60);
+  return m+':'+String(s).padStart(2,'0')+'/km';
+}
+function buildPaceCard(){
+  const ps=getPaceSettings();
+  return `<div class="card">
+    <div class="chdr" onclick="tog('pace')">
+      <div class="chdr-l"><div class="dot" style="background:var(--r)"></div>
+        <div><div class="dname">🎯 Pace Calculator</div><div class="ddate">Plan your race splits</div></div>
+      </div>
+      <span class="chev" id="chev_pace">▾</span>
+    </div>
+    <div class="tbody" id="body_pace">
+      <div class="row2">
+        <div class="fgrp"><div class="flbl">Goal Time (H:MM:SS)</div>
+          <input class="finp" type="text" id="paceTimeInp" value="${ps.time}" oninput="updatePaceCalc()"/></div>
+        <div class="fgrp"><div class="flbl">Distance</div>
+          <select class="finp" id="paceDistInp" onchange="updatePaceCalc()">
+            <option value="marathon" ${ps.dist==='marathon'?'selected':''}>Marathon (42.2km)</option>
+            <option value="half" ${ps.dist==='half'?'selected':''}>Half Marathon (21.1km)</option>
+          </select></div>
+      </div>
+      <div id="paceOutput"></div>
+    </div>
+  </div>`;
+}
+function updatePaceCalc(){
+  const timeInp=document.getElementById('paceTimeInp');
+  const distInp=document.getElementById('paceDistInp');
+  if(!timeInp || !distInp) return;
+  const time=timeInp.value.trim()||'4:00:00';
+  const dist=distInp.value;
+  savePaceSettings(time,dist);
+
+  const distKm = dist==='half' ? 21.0975 : 42.195;
+  const totalSec = parseHMS(time);
+  const paceSec = totalSec && distKm ? totalSec/distKm : 0;
+
+  const markers=[];
+  for(let k=5;k<distKm;k+=5) markers.push(Math.round(k*100)/100);
+  markers.push(Math.round(distKm*100)/100);
+
+  const rows=markers.map(k=>`<tr class="row"><td>${k}km</td><td style="text-align:right;font-weight:600">${fmtDuration(Math.round(paceSec*k))}</td></tr>`).join('');
+  document.getElementById('paceOutput').innerHTML = `
+    <div style="text-align:center;margin:10px 0">
+      <div style="font-size:22px;font-weight:700;color:var(--r)">${fmtPaceSec(paceSec)}</div>
+      <div class="loadlbl">Required Pace</div>
+    </div>
+    <table class="pacetbl">
+      <tr class="hd"><td>SPLIT</td><td style="text-align:right">CUMULATIVE TIME</td></tr>
+      ${rows}
+    </table>`;
+}
+
+// ── RECOVERY TREND CHART ──────────────────────────────────────────────────
+function getRecoverySeries(){
+  const labels=[], sleep=[], sore=[];
+  for(let w=1;w<=30;w++){
+    const d=load(w);
+    labels.push('W'+w);
+    sleep.push(d.sleep_hrs ? parseFloat(d.sleep_hrs) : null);
+    sore.push(d.soreness ? parseInt(d.soreness,10) : null);
+  }
+  return {labels,sleep,sore};
+}
+function showRecoveryChart(){
+  const {labels,sleep,sore}=getRecoverySeries();
+  document.getElementById('chartTitle').textContent='Recovery Trend — Sleep vs Soreness';
+  openModal('chartModal');
+  const ctx=document.getElementById('progressCanvas').getContext('2d');
+  if(chartInst) chartInst.destroy();
+  chartInst=new Chart(ctx,{
+    type:'line',
+    data:{labels, datasets:[
+      {label:'Sleep (hrs)', data:sleep, yAxisID:'y', borderColor:'#4a90d9', backgroundColor:'rgba(74,144,217,0.12)', spanGaps:true, tension:0.25, pointRadius:3, fill:true},
+      {label:'Soreness (1-5)', data:sore, yAxisID:'y1', borderColor:'#e74c3c', backgroundColor:'rgba(231,76,60,0.1)', spanGaps:true, tension:0.25, pointRadius:3, borderDash:[4,3]}
+    ]},
+    options:{
+      responsive:true,
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:true, position:'bottom', labels:{color:'#aaa',font:{size:9},boxWidth:10}}},
+      scales:{
+        x:{ticks:{color:'#777',font:{size:8}},grid:{color:'#1f1f1f'}},
+        y:{position:'left',ticks:{color:'#4a90d9',font:{size:9}},grid:{color:'#1f1f1f'},title:{display:true,text:'hrs',color:'#4a90d9',font:{size:9}}},
+        y1:{position:'right',min:0,max:5,ticks:{color:'#e74c3c',font:{size:9}},grid:{display:false},title:{display:true,text:'soreness',color:'#e74c3c',font:{size:9}}}
+      }
+    }
+  });
+}
+
+// ── CROSS-TRAINING TOGGLE ─────────────────────────────────────────────────
+function toggleXT(w){
+  const b=document.getElementById('xtbody_'+w);
+  const c=document.getElementById('xtchev_'+w);
+  if(!b) return;
+  const open=b.style.display!=='none';
+  b.style.display = open ? 'none' : 'block';
+  if(c) c.classList.toggle('open', !open);
 }
 
 // ── STRAVA INTEGRATION ──────────────────────────────────────────────────
@@ -1075,6 +1435,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────
+applyTheme();
 render();
 </script>
 </body>
