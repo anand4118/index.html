@@ -136,7 +136,17 @@ input,textarea{font-family:inherit}
 .modal-close{background:var(--bg3);border:1px solid var(--b);color:var(--t);width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:13px}
 .coach-body{font-size:13px;line-height:1.65;color:var(--t)}
 .coach-loading{text-align:center;color:var(--m);font-size:10px;letter-spacing:1.5px;padding:24px 0;text-transform:uppercase}
-.coach-foot{font-size:9px;color:var(--m);margin-top:14px;text-align:center;letter-spacing:.5px}
+.coach-foot{font-size:9px;color:var(--m);margin-top:10px;text-align:center;letter-spacing:.5px}
+.chat-wrap{display:flex;flex-direction:column;gap:8px;flex:1;overflow-y:auto;margin-bottom:10px;padding-right:2px}
+.chat-bubble{max-width:88%;padding:9px 12px;border-radius:10px;font-size:13px;line-height:1.55;white-space:pre-wrap}
+.chat-user{align-self:flex-end;background:var(--rdim);border:1px solid var(--rd);color:var(--t)}
+.chat-coach{align-self:flex-start;background:var(--bg3);border:1px solid var(--b);color:var(--t)}
+.chat-context{align-self:center;background:transparent;border:1px dashed var(--b);color:var(--m);font-size:10px;text-align:center;max-width:96%;padding:6px 10px}
+.chat-input-row{display:flex;gap:6px;flex-shrink:0}
+.chat-input{flex:1;background:var(--bg3);border:1px solid var(--b);color:var(--t);font-size:13px;padding:9px 10px;border-radius:6px;outline:none}
+.chat-input:focus{border-color:var(--r)}
+.chat-send{background:var(--r);color:#fff;border:none;width:42px;border-radius:6px;font-size:15px;cursor:pointer;flex-shrink:0}
+.chat-clear{font-size:9px;color:var(--m);text-align:center;margin-top:8px;cursor:pointer;letter-spacing:1px;text-transform:uppercase;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -199,13 +209,18 @@ input,textarea{font-family:inherit}
 </div>
 
 <div class="modal-ov" id="coachModal">
-  <div class="modal-box">
+  <div class="modal-box" style="display:flex;flex-direction:column;max-height:85vh">
     <div class="modal-hdr">
       <div class="modal-title">🤖 AI Coach</div>
       <button class="modal-close" onclick="closeModal('coachModal')">✕</button>
     </div>
-    <div class="coach-body" id="coachBody"></div>
-    <div class="coach-foot">Powered by Gemini 2.5 Flash · key stored only on this device</div>
+    <div class="chat-wrap" id="coachChat"></div>
+    <div class="chat-input-row">
+      <input class="chat-input" id="coachInput" type="text" placeholder="Ask a follow-up..."/>
+      <button class="chat-send" onclick="sendCoachMessage()">➤</button>
+    </div>
+    <div class="chat-clear" onclick="clearCoachChat()">🗑 Clear conversation</div>
+    <div class="coach-foot">Powered by Gemini 2.5 Flash · key + chat stored only on this device</div>
   </div>
 </div>
 
@@ -858,32 +873,22 @@ function setApiKeyPrompt(){
   }
 }
 
-function buildWeekSummary(w){
-  const d=load(w);
-  const plan=WPLAN[w-1];
-  const lines=[`Week ${w} of 30.`];
+// ── AI COACH PERSONA ──────────────────────────────────────────────────────
+// Brutally honest by design (no glazing/encouragement filler) — but accuracy
+// is non-negotiable. The most common failure mode for coaching chatbots is
+// inventing plausible-sounding numbers (a wrong "suggested weight", a made-up
+// pace). To kill that: every number the AI is allowed to cite is either
+// pulled verbatim from your logged data, or is this app's own deterministic
+// analyzeExercise() calculation — never the model's own arithmetic.
+const COACH_SYSTEM_PROMPT = `You are a brutally honest, no-nonsense Ironman 70.3 and marathon coach for a hybrid athlete (running + gym + optional swim/bike). You do not flatter, sugarcoat, or pad responses with generic encouragement ("great job!", "keep it up!") — if a session was weak, say so plainly and explain why. You are still fundamentally on the athlete's side (you want them to actually improve), but your tone is blunt and critical, not warm.
 
-  ['tue','fri','sun'].forEach(slot=>{
-    const dist=d['run_'+slot+'_dist'], pace=d['run_'+slot+'_pace'], hr=d['run_'+slot+'_hr'];
-    if(dist) lines.push(`${slot.toUpperCase()} run — target: ${plan[slot]}, actual: ${dist}km${pace?' @ '+pace:''}${hr?', HR '+hr+'bpm':''}`);
-  });
+CRITICAL ACCURACY RULES — these override everything else:
+1. Only state numeric facts (weights, distances, paces, reps, times, heart rates) that are explicitly present in the data given to you in this conversation. Never invent, estimate, round, or independently recalculate a number.
+2. If you want to recommend a specific next weight or rep target for a gym exercise, you MUST use the "app-computed next suggestion" value given to you for that exercise verbatim. Do NOT calculate your own suggested weight under any circumstances — you do not have the athlete's full rep history, the app does, and your guess will be wrong.
+3. If a number you'd need isn't in the data provided, say "not logged" instead of guessing.
+4. Keep replies tight: 2-4 sentences for a single-session review, a bit more for a full-week or trend review, unless the athlete explicitly asks for more detail.
 
-  const ALL=[...PULL,...LEGS,...PUSH];
-  ALL.forEach(ex=>{
-    const r1=d[ex.id+'_s1r'], r2=d[ex.id+'_s2r'], r3=d[ex.id+'_s3r'];
-    const w1=d[ex.id+'_s1w'];
-    if(r1||r2||r3){
-      lines.push(`${ex.name} (target ${ex.tgt}): ${w1||'BW'}kg × [${r1||'-'},${r2||'-'},${r3||'-'}] reps`);
-    }
-  });
-
-  if(d.bw) lines.push(`Bodyweight: ${d.bw}kg`);
-  if(d.sleep_hrs) lines.push(`Sleep: ${d.sleep_hrs}h, soreness ${d.soreness||'-'}/5, resting HR ${d.rhr||'-'}`);
-  if(d.swim_dist) lines.push(`Swim: ${(parseFloat(d.swim_dist)/1000).toFixed(2)}km`);
-  if(d.bike_dist) lines.push(`Bike: ${d.bike_dist}km`);
-  if(d.week_notes) lines.push(`Notes: ${d.week_notes}`);
-  return lines.join('\n');
-}
+Remember the full conversation — if the athlete already told you something earlier (an injury, a goal time, a recurring issue), use it instead of asking again or contradicting yourself.`;
 
 function daysLoggedCount(w){
   const d=load(w);
@@ -894,87 +899,172 @@ function daysLoggedCount(w){
   return count;
 }
 
-async function callGemini(prompt, key){
+// ── CHAT STATE (persisted — this is what makes the coach "remember") ──────
+const COACH_CHAT_LS='sub4_coach_chat';
+function getCoachChat(){ try{return JSON.parse(localStorage.getItem(COACH_CHAT_LS)||'[]')}catch{return []} }
+function saveCoachChat(arr){ localStorage.setItem(COACH_CHAT_LS, JSON.stringify(arr.slice(-40))); }
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+function renderCoachChat(){
+  const wrap=document.getElementById('coachChat');
+  if(!wrap) return;
+  const arr=getCoachChat();
+  wrap.innerHTML = arr.length ? arr.map(m=>{
+    const cls = m.role==='user' ? 'chat-user' : m.role==='context' ? 'chat-context' : 'chat-coach';
+    return `<div class="chat-bubble ${cls}">${escapeHtml(m.text)}</div>`;
+  }).join('') : '<div class="chat-context">No messages yet — tap an "Ask Coach" button on any day, or type a question below.</div>';
+  wrap.scrollTop = wrap.scrollHeight;
+}
+function clearCoachChat(){
+  if(!confirm('Clear the whole coach conversation? This cannot be undone.')) return;
+  localStorage.removeItem(COACH_CHAT_LS);
+  renderCoachChat();
+  toast('🗑 Conversation cleared');
+}
+
+async function callGemini(contents, key){
   const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+GEMINI_MODEL+':generateContent',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-goog-api-key':key},
-    body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})
+    body:JSON.stringify({
+      systemInstruction:{parts:[{text:COACH_SYSTEM_PROMPT}]},
+      contents
+    })
   });
   const json=await res.json();
   return {status:res.status, json};
 }
 
-// Shared runner for every coach call (full-week, per-day, trend) — handles
-// the loading state, the 503-overload auto-retry, and clear per-status errors.
-async function runCoachPrompt(loadingLabel, prompt){
+// Pushes a message into the persistent chat, calls Gemini with the FULL
+// history (so it remembers earlier turns), and appends the reply.
+// isContext=true means this came from an "Ask Coach About X" button rather
+// than something the athlete typed — shown visually distinct, but still
+// sent to the model as part of the conversation.
+async function sendToCoach(text, isContext){
   const key=getApiKey();
   if(!key){ setApiKeyPrompt(); return; }
+
   openModal('coachModal');
-  const body=document.getElementById('coachBody');
-  body.innerHTML='<div class="coach-loading">🤖 '+loadingLabel+'…</div>';
+  const chat=getCoachChat();
+  chat.push({role:isContext?'context':'user', text});
+  saveCoachChat(chat);
+  renderCoachChat();
+
+  const wrap=document.getElementById('coachChat');
+  wrap.insertAdjacentHTML('beforeend','<div class="chat-bubble chat-coach" id="coachTyping">🤖 …</div>');
+  wrap.scrollTop=wrap.scrollHeight;
+
+  // Gemini only knows user/model roles — context bubbles are sent as 'user' turns too
+  const contents = getCoachChat().map(m=>({ role: m.role==='model' ? 'model' : 'user', parts:[{text:m.text}] }));
+
   try{
-    let {status, json} = await callGemini(prompt, key);
+    let {status, json} = await callGemini(contents, key);
     if(status===503){
-      body.innerHTML='<div class="coach-loading">🤖 Coach is busy, retrying…</div>';
+      document.getElementById('coachTyping')?.remove();
+      wrap.insertAdjacentHTML('beforeend','<div class="chat-bubble chat-coach" id="coachTyping">🤖 busy, retrying…</div>');
       await new Promise(r=>setTimeout(r,2500));
-      ({status, json} = await callGemini(prompt, key));
+      ({status, json} = await callGemini(contents, key));
     }
-    if(status===401 || status===403){
-      throw new Error('Your API key was rejected. Tap ⚙ and re-paste it — make sure there are no extra spaces, and that it was created at aistudio.google.com/app/apikey.');
-    }
-    if(status===429){
-      throw new Error("You've hit Gemini's free-tier rate limit (requests per minute/day). Wait a minute and try again.");
-    }
-    if(status===503){
-      throw new Error("Gemini's servers are overloaded right now even after a retry. This is on Google's end — wait a minute and try again.");
-    }
+    document.getElementById('coachTyping')?.remove();
+
+    if(status===401 || status===403) throw new Error('Your API key was rejected. Tap ⚙ and re-paste it.');
+    if(status===429) throw new Error("You've hit Gemini's free-tier rate limit. Wait a minute and try again.");
+    if(status===503) throw new Error("Gemini's servers are overloaded even after a retry — try again shortly.");
     if(json.error) throw new Error(json.error.message || ('API error '+status));
-    const text=json.candidates?.[0]?.content?.parts?.[0]?.text;
-    body.textContent = text || 'No feedback this time — log a bit more data and try again.';
+
+    const reply=json.candidates?.[0]?.content?.parts?.[0]?.text || 'No response — try rephrasing.';
+    const chat2=getCoachChat();
+    chat2.push({role:'model', text:reply});
+    saveCoachChat(chat2);
+    renderCoachChat();
   }catch(err){
-    body.innerHTML = `<div style="color:#e76a6a;font-size:12px">⚠ Couldn't reach the AI coach.<br><br>${(err.message||'Unknown error')}</div>`;
+    document.getElementById('coachTyping')?.remove();
+    const chat2=getCoachChat();
+    chat2.push({role:'model', text:'⚠ '+(err.message||'Unknown error')});
+    saveCoachChat(chat2);
+    renderCoachChat();
   }
 }
 
-// ── FULL WEEK REVIEW ─────────────────────────────────────────────────────
-async function askCoach(){
+function sendCoachMessage(){
+  const inp=document.getElementById('coachInput');
+  const text=inp.value.trim();
+  if(!text) return;
+  inp.value='';
+  sendToCoach(text, false);
+}
+document.addEventListener('keydown', (e)=>{
+  if(e.target && e.target.id==='coachInput' && e.key==='Enter'){ sendCoachMessage(); }
+});
+
+// ── FULL WEEK REVIEW ──────────────────────────────────────────────────────
+function buildWeekSummary(w){
+  const d=load(w);
+  const plan=WPLAN[w-1];
+  const lines=[`[Full Week ${w} of 30 review requested]`];
+
+  ['tue','fri','sun'].forEach(slot=>{
+    const dist=d['run_'+slot+'_dist'], pace=d['run_'+slot+'_pace'], hr=d['run_'+slot+'_hr'];
+    if(dist) lines.push(`${slot.toUpperCase()} run — target: ${plan[slot]}, actual: ${dist}km${pace?' @ '+pace:''}${hr?', HR '+hr+'bpm':''}`);
+    else lines.push(`${slot.toUpperCase()} run — not logged`);
+  });
+
+  [['PULL',PULL],['LEGS',LEGS],['PUSH',PUSH]].forEach(([gname,grp])=>{
+    grp.forEach(ex=>{
+      const an=analyzeExercise(ex,w);
+      const r1=d[ex.id+'_s1r'], r2=d[ex.id+'_s2r'], r3=d[ex.id+'_s3r'], w1=d[ex.id+'_s1w'];
+      if(r1||r2||r3){
+        lines.push(`${ex.name} [${gname}] (target ${ex.tgt}): logged ${w1||'BW'}kg × [${r1||'-'},${r2||'-'},${r3||'-'}]. App-computed next suggestion: ${an.text}.`);
+      }
+    });
+  });
+
+  if(d.bw) lines.push(`Bodyweight: ${d.bw}kg`);
+  if(d.sleep_hrs) lines.push(`Sleep: ${d.sleep_hrs}h, soreness ${d.soreness||'-'}/5, resting HR ${d.rhr||'-'}`);
+  if(d.swim_dist) lines.push(`Swim: ${(parseFloat(d.swim_dist)/1000).toFixed(2)}km`);
+  if(d.bike_dist) lines.push(`Bike: ${d.bike_dist}km`);
+  if(d.week_notes) lines.push(`Notes: ${d.week_notes}`);
+  return lines.join('\n');
+}
+function askCoach(){
   if(daysLoggedCount(CW)===0){ toast('⚠ Log at least one session this week first'); return; }
-  const summary=buildWeekSummary(CW);
-  const prompt=`Act as a professional Ironman 70.3 coach. Analyze my full week of data: ${summary}. Detect any performance plateaus, compare my running fatigue against my gym performance, and provide 1-2 sentences of specific advice to either push harder or prioritize recovery this coming week.`;
-  await runCoachPrompt('Reviewing your full Week '+CW, prompt);
+  sendToCoach(buildWeekSummary(CW), true);
 }
 
-// ── PER-DAY REVIEWS ──────────────────────────────────────────────────────
+// ── PER-DAY REVIEWS ───────────────────────────────────────────────────────
 function buildRunDaySummary(w, slot){
   const d=load(w), plan=WPLAN[w-1];
   const dist=d['run_'+slot+'_dist'];
   if(!dist) return null;
   const pace=d['run_'+slot+'_pace'], hr=d['run_'+slot+'_hr'], time=d['run_'+slot+'_time'], notes=d['run_'+slot+'_notes'];
-  return `Target: ${plan[slot]}. Actual: ${dist}km${pace?' @ '+pace:''}${hr?', HR '+hr+'bpm':''}${time?', time '+time:''}${notes?'. Notes: '+notes:''}`;
+  return `[Single run session review requested]\nTarget: ${plan[slot]}. Actual: ${dist}km${pace?' @ '+pace:''}${hr?', HR '+hr+'bpm':''}${time?', time '+time:''}${notes?'. Notes: '+notes:''}`;
 }
-async function askRunDayCoach(w, slot, label){
+function askRunDayCoach(w, slot, label){
   const summary=buildRunDaySummary(w, slot);
   if(!summary){ toast('⚠ Log this run first'); return; }
-  const prompt=`Act as a professional Ironman 70.3 coach. Review just this single run session (${label}): ${summary}. Give 1-2 sentences of direct feedback on this session alone — on target, too easy, too hard, or a red flag — plus one concrete tip for next time.`;
-  await runCoachPrompt('Reviewing '+label, prompt);
+  sendToCoach(`${label}\n${summary}`, true);
 }
 
 const DAYGROUPS={PULL,LEGS,PUSH};
 function buildGymDaySummary(w, groupKey){
   const d=load(w);
   const exercises=DAYGROUPS[groupKey]||[];
-  const lines=[];
+  const lines=['[Single gym session review requested]'];
+  let any=false;
   exercises.forEach(ex=>{
     const r1=d[ex.id+'_s1r'], r2=d[ex.id+'_s2r'], r3=d[ex.id+'_s3r'], w1=d[ex.id+'_s1w'];
-    if(r1||r2||r3) lines.push(`${ex.name} (target ${ex.tgt}): ${w1||'BW'}kg × [${r1||'-'},${r2||'-'},${r3||'-'}]`);
+    if(r1||r2||r3){
+      any=true;
+      const an=analyzeExercise(ex,w);
+      lines.push(`${ex.name} (target ${ex.tgt}): logged ${w1||'BW'}kg × [${r1||'-'},${r2||'-'},${r3||'-'}]. App-computed next suggestion: ${an.text}.`);
+    }
   });
-  return lines.length ? lines.join('; ') : null;
+  return any ? lines.join('\n') : null;
 }
-async function askGymDayCoach(w, groupKey, label){
+function askGymDayCoach(w, groupKey, label){
   const summary=buildGymDaySummary(w, groupKey);
   if(!summary){ toast('⚠ Log this session first'); return; }
-  const prompt=`Act as a professional Ironman 70.3 coach. Review just this single gym session (${label}): ${summary}. Give 1-2 sentences of direct feedback on this session alone, including whether it looks like progress, a plateau, or overreaching — plus one concrete tip for next time.`;
-  await runCoachPrompt('Reviewing '+label, prompt);
+  sendToCoach(`${label}\n${summary}`, true);
 }
 
 function buildRecoveryDaySummary(w){
@@ -987,19 +1077,18 @@ function buildRecoveryDaySummary(w){
   if(d.swim_dist) parts.push((parseFloat(d.swim_dist)/1000).toFixed(2)+'km swim');
   if(d.bike_dist) parts.push(d.bike_dist+'km bike');
   if(d.week_notes) parts.push('Notes: '+d.week_notes);
-  return parts.length ? parts.join(', ') : null;
+  return parts.length ? '[Recovery day review requested]\n'+parts.join(', ') : null;
 }
-async function askRestDayCoach(w, label){
+function askRestDayCoach(w, label){
   const summary=buildRecoveryDaySummary(w);
   if(!summary){ toast('⚠ Log your bodyweight, sleep, or notes first'); return; }
-  const prompt=`Act as a professional Ironman 70.3 coach. Review just today's recovery data (${label}): ${summary}. Give 1-2 sentences on whether this looks like adequate recovery for someone in marathon/70.3 training, and one concrete recovery tip if needed.`;
-  await runCoachPrompt('Reviewing '+label, prompt);
+  sendToCoach(`${label}\n${summary}`, true);
 }
 
-// ── 4-WEEK TREND SUMMARY ─────────────────────────────────────────────────
+// ── 4-WEEK TREND SUMMARY ──────────────────────────────────────────────────
 function buildTrendSummary(weekNum){
   const startW=Math.max(1,weekNum-3);
-  const lines=[];
+  const lines=['[4-week trend review requested]'];
   for(let w=startW; w<=weekNum; w++){
     const d=load(w);
     let runTotal=0;
@@ -1014,10 +1103,8 @@ function buildTrendSummary(weekNum){
   }
   return lines.join('\n');
 }
-async function askTrendSummary(){
-  const summary=buildTrendSummary(CW);
-  const prompt=`Act as a professional Ironman 70.3 coach reviewing the last 4 weeks of training data: ${summary}. Identify the overall trend (improving, plateauing, or overreaching), flag any concerning pattern between recovery and training load, and give 2-3 sentences of practical advice for the upcoming week.`;
-  await runCoachPrompt('Reviewing your last 4 weeks', prompt);
+function askTrendSummary(){
+  sendToCoach(buildTrendSummary(CW), true);
 }
 
 // ── EXPORT ────────────────────────────────────────────────────────────────
@@ -1437,6 +1524,7 @@ if('serviceWorker' in navigator){
 // ── INIT ──────────────────────────────────────────────────────────────────
 applyTheme();
 render();
+renderCoachChat();
 </script>
 </body>
 </html>
